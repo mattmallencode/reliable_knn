@@ -4,61 +4,65 @@ from sklearn.model_selection import train_test_split  # type: ignore
 from sklearn.metrics import mean_absolute_error  # type: ignore
 
 
-def load_dataset(filepath: str, target_col_name: str) -> pd.DataFrame:
-    '''Loads dataset from filepath and returns it as a Pandas DataFrame.
+def preprocess_dataset(
+        dataset: pd.DataFrame,
+) -> pd.DataFrame:
+    '''Preprocesses data, converts numeric cols and one-hot encodes categorical cols.
 
     Keyword arguments:
-    filepath -- path to the .csv or .tsv file containing the dataset.
-    target_col_name -- the target column of the kNN task.
+    dataset -- the dataset we wish to preprocess.
     '''
 
-    # Read CSV into a DataFrame.
-    dataset: pd.DataFrame = pd.read_csv(filepath)
+    # Columns to one-hot encode.
+    cols_to_encode: list[str] = []
 
-    # Preprocess the data and return.
-    return preprocess_dataset(dataset, target_col_name)
+    # If marked with '(cat)' it is a categorical column.
+    # Else, try to convert columns to numeric. If unsuccessful, it's a categorical col.
+    for col in dataset.columns:
+        if '(cat)' in col.lower():
+            cols_to_encode.append(col)
+            continue
+        try:
+            dataset[col] = pd.to_numeric(dataset[col])
+        except ValueError:
+            cols_to_encode.append(col)
+
+    # One-hot encode categorical columns.
+    dataset = pd.get_dummies(dataset, columns=cols_to_encode, dtype=float)
+
+    # Reset indices.
+    dataset.reset_index(inplace=True, drop=True)
+
+    return dataset
 
 
-def is_numeric_col(column: pd.Series) -> bool:
-    '''Returns true if a pandas column is numeric data, also converts the columns.
+def align_test_cols(
+        training_dataset: pd.DataFrame,
+        testing_dataset: pd.DataFrame
+) -> pd.DataFrame:
+    '''Aligns testing_dataset cols with those of training_dataset.
 
     Keyword arguments:
-    column -- the column we wish to apply the check to.
+    training_dataset -- the training dataset.
+    testing_dataset -- the dataset we wish to align to training_dataset.
     '''
 
-    # Try convert the column to numeric, if no exception is raised it is numeric.
-    try:
-        pd.to_numeric(column)
-        return True
+    # Get the cols in training that are not in testing.
+    missing_cols: set[str] = set(
+        training_dataset.columns) - set(testing_dataset.columns)
 
-    # Exception raised, so there is non numeric data in the column, return False.
-    except ValueError:
-        return False
+    # Create a DataFrame for the missing columns filled with zeroes.
+    missing_data: pd.DataFrame = pd.DataFrame(
+        {col: np.zeros(len(testing_dataset)) for col in missing_cols})
 
+    # Concatenate the original testing_dataset with the missing columns.
+    testing_dataset = pd.concat([testing_dataset, missing_data], axis=1)
 
-def preprocess_dataset(dataset: pd.DataFrame, target_col_name: str) -> pd.DataFrame:
-    '''Preprocesses data, drops non-numeric cols (except target col) and shuffles data.
+    # Make sure the ordering of the cols in both datasets matches.
+    testing_dataset = testing_dataset[training_dataset.columns]
 
-    Keyword arguments:
-    dataset -- the dataset we wish to preproccess.
-    target_col_name -- the name of the target column of the kNN task.
-    '''
-
-    # Get the numeric columns by applying is_numeric to the columns of the dataset.
-    # Also keep target column.
-    numeric_columns: pd.Index[str] = dataset.columns[
-        (dataset.apply(is_numeric_col)) | (dataset.columns == target_col_name)
-    ]
-
-    # Get rid of the non-numeric columns from the dataset.
-    dataset_just_numeric: pd.DataFrame = dataset[numeric_columns]
-
-    # Shuffle the data.
-    dataset_just_numeric = dataset_just_numeric.sample(frac=1, random_state=42)
-    dataset_just_numeric.reset_index(inplace=True, drop=True)
-
-    # Return the preproccessed dataset.
-    return dataset_just_numeric
+    # Return the aligned dataset.
+    return testing_dataset
 
 
 def split_dataset(
@@ -274,6 +278,7 @@ def evaluate_knn(
         dataset_file_path: str,
         target_column_name: str,
         test_size: float = 0.2,
+        missing_values: list[str] = ['?']
 ) -> float:
     '''Returns the error or accuracy rate (depending on task) of kNN on a dataset.
 
@@ -282,10 +287,11 @@ def evaluate_knn(
     dataset_file_path -- file path to the dataset to run the kNN on.
     target_column_name -- name of the target / class column i.e. the value to predict.
     test_size -- what percentage of the dataset to reserve for testing.
+    missing_values -- strings denoting missing values in the dataset.
     '''
 
     # First the load the dataset.
-    dataset: pd.DataFrame = load_dataset(dataset_file_path, target_column_name)
+    dataset: pd.DataFrame = pd.read_csv(dataset_file_path)
 
     # Get a range of candidate k values to validate.
     candidate_k_values: list[int] = get_candidate_k_values(len(dataset))
@@ -298,6 +304,12 @@ def evaluate_knn(
     validation_targets: pd.Series
     merged_val_training_data: np.ndarray
     merged_val_training_targets: np.ndarray
+
+    # Replace specified missing values with NaN.
+    dataset.replace(missing_values, np.nan, inplace=True)
+
+    # Drop rows containing NaN.
+    dataset.dropna(inplace=True)
 
     # Split dataset into training, validation, and test datasets.
     training_data, validation_data, testing_data = split_dataset(
@@ -312,6 +324,15 @@ def evaluate_knn(
     training_data = training_data.drop(columns=[target_column_name])
     validation_data = validation_data.drop(columns=[target_column_name])
     testing_data = testing_data.drop(columns=[target_column_name])
+
+    # Preprocess split datasets.
+    training_data = preprocess_dataset(training_data)
+    validation_data = preprocess_dataset(validation_data)
+    testing_data = preprocess_dataset(testing_data)
+
+    # Add any missing columns to the non-training datasets.
+    validation_data = align_test_cols(training_data, validation_data)
+    testing_data = align_test_cols(training_data, testing_data)
 
     # Convert to NumPy arrays to leverage vectorisation.
     training_data_np: np.ndarray = training_data.to_numpy()
@@ -351,7 +372,7 @@ def evaluate_knn(
             [training_data_np, validation_data_np])
         merged_val_training_targets = np.concatenate(
             [training_targets_np, validation_targets])
-        
+
         # Get MAE of testing data when neighbors are gotten from training + validation.
         return get_mae_of_knn_regressor(
             best_k_for_validation, merged_val_training_data,
@@ -402,5 +423,5 @@ def evaluate_knn(
     )
 
 
-print(evaluate_knn('regressor', 'datasets/abalone.data', 'Rings'))
+# print(evaluate_knn('regressor', 'datasets/abalone.data', 'Rings'))
 # print(evaluate_knn('classifier', 'datasets/processed.cleveland.data', 'num'))
