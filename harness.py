@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split  # type: ignore
-from sklearn.metrics import mean_absolute_error  # type: ignore
+from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler  # type: ignore
 
 
@@ -48,7 +48,7 @@ def preprocess_dataset(
         dataset_scaled = scaler.fit_transform(dataset)
     else:
         dataset_scaled = scaler.transform(dataset)
-        
+
     return (dataset_scaled, training_cols, scaler)
 
 
@@ -259,31 +259,23 @@ def get_accuracy_of_knn_classifier(
     Keyword arguments:
     k -- the value of k for the KNN classification.
     training_dataset -- the dataset the neighbors are taken from.
-    testing_dataset -- the validation or test dataset to get the MAE for.s
+    testing_dataset -- the validation or test dataset to get the MAE for.
     training_targets -- the target values of training_dataset.
     testing_targets -- the target values of testing_dataset.
     '''
 
-    # Initialise some variables to keep track of accuracy.
-    num_correct_class_predictions: int = 0
-    num_total_class_predictions: int = testing_dataset.shape[0]
+    # Create a list to store predictions for each example in the testing data.
+    predictions: list[str] = []
 
-    # For each example in the testing data
-    for index, example in enumerate(testing_dataset):
-
+    # For each example in the testing data.
+    for example in testing_dataset:
         # Predict the class for this example using the kNN classifier.
         predicted_class: str = knn_classifier(
             example, training_dataset, training_targets, k)
-        
-        
-        # Get the actual class for this example.
-        actual_class: str = str(testing_targets.iloc[index])
-        # Increment correct prediction counter if predicted class is actual class.
-        if str(predicted_class) == actual_class:
-            num_correct_class_predictions += 1
+        predictions.append(predicted_class)
 
-    # Calculate the accuracy for this kNN classification.
-    accuracy: float = num_correct_class_predictions / num_total_class_predictions
+    # Calculate the accuracy.
+    accuracy: float = accuracy_score(testing_targets, predictions)
 
     # Return the accuracy.
     return accuracy
@@ -443,4 +435,4 @@ def evaluate_knn(
 
 
 # print(evaluate_knn('regressor', 'datasets/abalone.data', 'Rings'))
-# print(evaluate_knn('classifier', 'datasets/processed.cleveland.data', 'num'))
+print(evaluate_knn('classifier', 'datasets/custom_cleveland.data', 'num'))
