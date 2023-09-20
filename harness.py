@@ -48,8 +48,7 @@ def preprocess_dataset(
         dataset_scaled = scaler.fit_transform(dataset)
     else:
         dataset_scaled = scaler.transform(dataset)
-
-    print(dataset, dataset_scaled)
+        
     return (dataset_scaled, training_cols, scaler)
 
 
