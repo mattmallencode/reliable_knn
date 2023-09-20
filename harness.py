@@ -1,16 +1,21 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split  # type: ignore
-from sklearn.metrics import mean_absolute_error  # type: ignore
+from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
+from sklearn.preprocessing import StandardScaler  # type: ignore
 
 
 def preprocess_dataset(
         dataset: pd.DataFrame,
-) -> pd.DataFrame:
-    '''Preprocesses data, converts numeric cols and one-hot encodes categorical cols.
+        training_cols: pd.Index | None = None,
+        scaler: StandardScaler | None = None
+) -> tuple[np.ndarray, pd.Index, StandardScaler]:
+    '''Preprocesses data and returns the cols and scaler used for the dataset.
 
     Keyword arguments:
     dataset -- the dataset we wish to preprocess.
+    training_cols -- defaults to None; used to account for missing cols post split.
+    scaler -- the StandardScaler used to scale the data, one is init if None is passed.
     '''
 
     # Columns to one-hot encode.
@@ -30,36 +35,47 @@ def preprocess_dataset(
     # One-hot encode categorical columns.
     dataset = pd.get_dummies(dataset, columns=cols_to_encode, dtype=float)
 
-    # Reset indices.
-    dataset.reset_index(inplace=True, drop=True)
+    # Add missing cols if this is the test or validation dataset.
+    if training_cols is not None:
+        dataset = align_test_cols(training_cols, dataset)
+    else:
+        training_cols = dataset.columns
 
-    return dataset
+    dataset_scaled: np.ndarray
+
+    if scaler is None:
+        scaler = StandardScaler()
+        dataset_scaled = scaler.fit_transform(dataset)
+    else:
+        dataset_scaled = scaler.transform(dataset)
+
+    return (dataset_scaled, training_cols, scaler)
 
 
 def align_test_cols(
-        training_dataset: pd.DataFrame,
+        training_cols: pd.Index,
         testing_dataset: pd.DataFrame
 ) -> pd.DataFrame:
     '''Aligns testing_dataset cols with those of training_dataset.
 
     Keyword arguments:
-    training_dataset -- the training dataset.
+    training_dataset -- the columns found in the training dataset.
     testing_dataset -- the dataset we wish to align to training_dataset.
     '''
 
     # Get the cols in training that are not in testing.
     missing_cols: set[str] = set(
-        training_dataset.columns) - set(testing_dataset.columns)
+        training_cols) - set(testing_dataset.columns)
 
     # Create a DataFrame for the missing columns filled with zeroes.
     missing_data: pd.DataFrame = pd.DataFrame(
         {col: np.zeros(len(testing_dataset)) for col in missing_cols})
-
+    
     # Concatenate the original testing_dataset with the missing columns.
     testing_dataset = pd.concat([testing_dataset, missing_data], axis=1)
 
     # Make sure the ordering of the cols in both datasets matches.
-    testing_dataset = testing_dataset[training_dataset.columns]
+    testing_dataset = testing_dataset[training_cols]
 
     # Return the aligned dataset.
     return testing_dataset
@@ -243,31 +259,23 @@ def get_accuracy_of_knn_classifier(
     Keyword arguments:
     k -- the value of k for the KNN classification.
     training_dataset -- the dataset the neighbors are taken from.
-    testing_dataset -- the validation or test dataset to get the MAE for.s
+    testing_dataset -- the validation or test dataset to get the MAE for.
     training_targets -- the target values of training_dataset.
     testing_targets -- the target values of testing_dataset.
     '''
 
-    # Initialise some variables to keep track of accuracy.
-    num_correct_class_predictions: int = 0
-    num_total_class_predictions: int = testing_dataset.shape[0]
+    # Create a list to store predictions for each example in the testing data.
+    predictions: list[str] = []
 
-    # For each example in the testing data
-    for index, example in enumerate(testing_dataset):
-
+    # For each example in the testing data.
+    for example in testing_dataset:
         # Predict the class for this example using the kNN classifier.
         predicted_class: str = knn_classifier(
             example, training_dataset, training_targets, k)
+        predictions.append(predicted_class)
 
-        # Get the actual class for this example.
-        actual_class: str = str(testing_targets.iloc[index])
-
-        # Increment correct prediction counter if predicted class is actual class.
-        if str(predicted_class) == actual_class:
-            num_correct_class_predictions += 1
-
-    # Calculate the accuracy for this kNN classification.
-    accuracy: float = num_correct_class_predictions / num_total_class_predictions
+    # Calculate the accuracy.
+    accuracy: float = accuracy_score(testing_targets, predictions)
 
     # Return the accuracy.
     return accuracy
@@ -314,31 +322,34 @@ def evaluate_knn(
     # Split dataset into training, validation, and test datasets.
     training_data, validation_data, testing_data = split_dataset(
         dataset, test_size)
+    
+    # Reset the indices.
+    training_data.reset_index(inplace=True, drop=True)
+    validation_data.reset_index(inplace=True, drop=True)
+    testing_data.reset_index(inplace=True, drop=True)
 
     # Get targets for each of the subsets of the data.
     training_targets = training_data[target_column_name]
     validation_targets = validation_data[target_column_name]
     testing_targets = testing_data[target_column_name]
-
+    
     # Exclude targets from features.
     training_data = training_data.drop(columns=[target_column_name])
     validation_data = validation_data.drop(columns=[target_column_name])
     testing_data = testing_data.drop(columns=[target_column_name])
 
+    training_data_scaled: np.ndarray
+    validation_data_scaled: np.ndarray
+    testing_data_scaled: np.ndarray
+
     # Preprocess split datasets.
-    training_data = preprocess_dataset(training_data)
-    validation_data = preprocess_dataset(validation_data)
-    testing_data = preprocess_dataset(testing_data)
-
-    # Add any missing columns to the non-training datasets.
-    validation_data = align_test_cols(training_data, validation_data)
-    testing_data = align_test_cols(training_data, testing_data)
-
-    # Convert to NumPy arrays to leverage vectorisation.
-    training_data_np: np.ndarray = training_data.to_numpy()
-    testing_data_np: np.ndarray = testing_data.to_numpy()
+    training_data_scaled, training_cols, scaler = preprocess_dataset(
+        training_data)
+    validation_data_scaled, _, _ = preprocess_dataset(
+        validation_data, training_cols, scaler)
+    testing_data_scaled, _, _ = preprocess_dataset(
+        testing_data, training_cols, scaler)
     training_targets_np: np.ndarray = training_targets.to_numpy()
-    validation_data_np: np.ndarray = validation_data.to_numpy()
 
     # Value of the best_k_for_validation (to be validated later).
     best_k_for_validation: int | None = None
@@ -353,8 +364,8 @@ def evaluate_knn(
         for candidate_k in candidate_k_values:
 
             mae: float = get_mae_of_knn_regressor(
-                candidate_k, training_data_np,
-                validation_data_np, training_targets_np,
+                candidate_k, training_data_scaled,
+                validation_data_scaled, training_targets_np,
                 validation_targets
             )
 
@@ -369,14 +380,14 @@ def evaluate_knn(
 
         # Merge validation and training data so we have more data for testing.
         merged_val_training_data = np.vstack(
-            [training_data_np, validation_data_np])
+            [training_data_scaled, validation_data_scaled])
         merged_val_training_targets = np.concatenate(
             [training_targets_np, validation_targets])
 
         # Get MAE of testing data when neighbors are gotten from training + validation.
         return get_mae_of_knn_regressor(
             best_k_for_validation, merged_val_training_data,
-            testing_data_np, merged_val_training_targets,
+            testing_data_scaled, merged_val_training_targets,
             testing_targets
         )
 
@@ -390,8 +401,8 @@ def evaluate_knn(
         for candidate_k in candidate_k_values:
 
             accuracy: float = get_accuracy_of_knn_classifier(
-                candidate_k, training_data_np,
-                validation_data_np, training_targets_np,
+                candidate_k, training_data_scaled,
+                validation_data_scaled, training_targets_np,
                 validation_targets)
 
             # If better than best, update best_accuracy and best_k_for_validation.
@@ -405,14 +416,14 @@ def evaluate_knn(
 
         # Merge validation and training data so we have more data for testing.
         merged_val_training_data = np.vstack(
-            [training_data_np, validation_data_np])
+            [training_data_scaled, validation_data_scaled])
         merged_val_training_targets = np.concatenate(
             [training_targets_np, validation_targets])
 
         # Get MAE of testing data when neighbors are gotten from training + validation.
         return get_accuracy_of_knn_classifier(
             best_k_for_validation, merged_val_training_data,
-            testing_data_np, merged_val_training_targets,
+            testing_data_scaled, merged_val_training_targets,
             testing_targets
         )
 
@@ -424,4 +435,4 @@ def evaluate_knn(
 
 
 # print(evaluate_knn('regressor', 'datasets/abalone.data', 'Rings'))
-# print(evaluate_knn('classifier', 'datasets/processed.cleveland.data', 'num'))
+print(evaluate_knn('classifier', 'datasets/custom_cleveland.data', 'num'))
