@@ -529,83 +529,104 @@ class KNNHarness:
 
         # Return the accuracy.
         return accuracy
+    
+    def _get_best_k_for_regressor(self) -> int:
+        '''Returns the best k found for KNN regression on the validation set.'''
 
+        best_k: int
 
-    def evaluate_knn(self) -> float:
-        '''Returns error or accuracy rate (depending on task) of kNN on a dataset.'''
-        # If it's a regression task.
+        # Set the best_mae to positive infinity.
+        best_mae_for_validation: float = float('inf')
+
+        # For each canidate k value, get its MAE.
+        for candidate_k in self.candidate_k_values:
+
+            mae: float = self.get_mae_of_knn_regressor(
+                candidate_k, self.training_data,
+                self.validation_data, self.training_targets,
+                self.validation_targets
+            )
+
+            # If better than best, update best_mae and best_k.
+            if mae < best_mae_for_validation:
+                best_mae_for_validation = mae
+                best_k = candidate_k
+
+        # Default value for best_k if left undefined.
+        if not best_k:
+            best_k = 3
+        
+        return best_k
+    
+    def _evaluate_regressor(self) -> float:
+        '''Returns error of KNN regressor on the test set.'''
+
+        self.best_k = self._get_best_k_for_regressor()
+
+        # Merge validation and training data so we have more data for testing.
+        self.merged_val_training_data = np.vstack(
+            [self._training_data, self.validation_data])
+        self.merged_val_training_targets = np.concatenate(
+            [self.training_targets, self.validation_targets])
+        # Get MAE of test data when neighbors are gotten from training + validation.
+        return self.get_mae_of_knn_regressor(
+            self.best_k, self.merged_val_training_data,
+            self.testing_data, self.merged_val_training_targets,
+            self.testing_targets
+        )
+    
+    def _get_best_k_for_classifier(self) -> int:
+        '''Returns the best k found for KNN classification on the validation set.'''
+
+        # Set the best_accuracy to positive infinity.
+        best_accuracy_for_validation: float = float('-inf')
+
+        # For each canidate k value, get its accuracy.
+        for candidate_k in self.candidate_k_values:
+
+            accuracy: float = self.get_accuracy_of_knn_classifier(
+                candidate_k, self.training_data,
+                self.validation_data, self.training_targets,
+                self.validation_targets)
+
+            # If better than best, update best_accuracy and best_k.
+            if accuracy > best_accuracy_for_validation:
+                best_accuracy_for_validation = accuracy
+                best_k = candidate_k
+
+        # Default value for best_k if left undefined.
+        if not best_k:
+            best_k = 3
+
+        return best_k
+
+    
+    def _evaluate_classifier(self) -> float:
+        '''Returns accuracy of KNN classifier on the test set.'''
+        
+        self.best_k = self._get_best_k_for_classifier()
+
+        # Merge validation and training data so we have more data for testing.
+        self.merged_val_training_data = np.vstack(
+            [self.training_data, self.validation_data])
+        self.merged_val_training_targets = np.concatenate(
+            [self.training_targets, self.validation_targets])
+
+        # Get MAE of test data when neighbors are gotten from training + validation.
+        return self.get_accuracy_of_knn_classifier(
+            self.best_k, self.merged_val_training_data,
+            self.testing_data, self.merged_val_training_targets,
+            self.testing_targets
+        )
+
+    def evaluate(self) -> float:
+        '''Returns error or accuracy rate (depending on task) of kNN on the dataset.'''
+
         if self.regressor_or_classifier == 'regressor':
-
-            # Set the best_mae to positive infinity.
-            best_mae_for_validation: float = float('inf')
-
-            # For each canidate k value, get its MAE.
-            for candidate_k in self.candidate_k_values:
-
-                mae: float = self.get_mae_of_knn_regressor(
-                    candidate_k, self.training_data,
-                    self.validation_data, self.training_targets,
-                    self.validation_targets
-                )
-
-                # If better than best, update best_mae and best_k.
-                if mae < best_mae_for_validation:
-                    best_mae_for_validation = mae
-                    self.best_k = candidate_k
-
-            # Default value for best_k if left undefined.
-            if not self.best_k:
-                self.best_k = 3
-                
-            # Merge validation and training data so we have more data for testing.
-            self.merged_val_training_data = np.vstack(
-                [self._training_data, self.validation_data])
-            self.merged_val_training_targets = np.concatenate(
-                [self.training_targets, self.validation_targets])
-
-            # Get MAE of test data when neighbors are gotten from training + validation.
-            return self.get_mae_of_knn_regressor(
-                self.best_k, self.merged_val_training_data,
-                self.testing_data, self.merged_val_training_targets,
-                self.testing_targets
-            )
-
-        # If it is a classification task.
+            return self._evaluate_regressor()
         else:
-
-            # Set the best_accuracy to positive infinity.
-            best_accuracy_for_validation: float = float('-inf')
-
-            # For each canidate k value, get its accuracy.
-            for candidate_k in self.candidate_k_values:
-
-                accuracy: float = self.get_accuracy_of_knn_classifier(
-                    candidate_k, self.training_data,
-                    self.validation_data, self.training_targets,
-                    self.validation_targets)
-
-                # If better than best, update best_accuracy and best_k.
-                if accuracy > best_accuracy_for_validation:
-                    best_accuracy_for_validation = accuracy
-                    self.best_k = candidate_k
-
-            # Default value for best_k if left undefined.
-            if not self.best_k:
-                self.best_k = 3
-
-            # Merge validation and training data so we have more data for testing.
-            self.merged_val_training_data = np.vstack(
-                [self.training_data, self.validation_data])
-            self.merged_val_training_targets = np.concatenate(
-                [self.training_targets, self.validation_targets])
-
-            # Get MAE of test data when neighbors are gotten from training + validation.
-            return self.get_accuracy_of_knn_classifier(
-                self.best_k, self.merged_val_training_data,
-                self.testing_data, self.merged_val_training_targets,
-                self.testing_targets
-            )
+            return self._evaluate_classifier()
 
 #test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
 #test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-#print(test.evaluate_knn())
+#print(test.evaluate())
