@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split  # type: ignore
+from sklearn.model_selection import train_test_split, KFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler  # type: ignore
 
@@ -24,30 +24,25 @@ class KNNHarness:
         test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
         '''
-        
+
         # Raise Exception if the user passed incorrent regressor_or_classifier value.
         if regressor_or_classifier.lower() not in ['classifier', 'regressor']:
             raise ValueError(
                 'regressor_or_classifier must be set to "regressor" or "classifier" ' +
                 f'not "{regressor_or_classifier}"'
             )
-    
+
         self._regressor_or_classifier: str = regressor_or_classifier.lower()
-    
         self._dataset_file_path: str = dataset_file_path
         self._target_column_name: str = target_column_name
         self._test_size: float = test_size
         self._missing_values: list[str] = missing_values
         self._training_data: np.ndarray = np.ndarray([])
-        self._validation_data: np.ndarray = np.ndarray([])
         self._testing_data: np.ndarray = np.ndarray([])
         self._training_targets: np.ndarray = np.ndarray([])
-        self._validation_targets: pd.Series = pd.Series()
         self._testing_targets: pd.Series = pd.Series()
-        self._merged_val_training_data: np.ndarray = np.ndarray([])
-        self._merged_val_training_targets: np.ndarray = np.ndarray([])
         # Value of the best_k (to be validated later).
-        self._best_k: int  = 3
+        self._best_k: int = 3
         self._candidate_k_values: list[int] = [3]
         self._load_split_and_preprocess_data()
 
@@ -94,18 +89,6 @@ class KNNHarness:
         self._training_data = data
 
     @property
-    def validation_data(self) -> np.ndarray:
-        '''Getter for the validation_data property.'''
-
-        return self._validation_data
-
-    @validation_data.setter
-    def validation_data(self, data: np.ndarray) -> None:
-        '''Setter for the validation_data property.'''
-
-        self._validation_data = data
-
-    @property
     def testing_data(self) -> np.ndarray:
         '''Getter for the testing_data property.'''
 
@@ -130,18 +113,6 @@ class KNNHarness:
         self._training_targets = targets
 
     @property
-    def validation_targets(self) -> pd.Series:
-        '''Getter for the validation targets property.'''
-
-        return self._validation_targets
-
-    @validation_targets.setter
-    def validation_targets(self, targets: pd.Series) -> None:
-        '''Setter for the validation_targets property.'''
-
-        self._validation_targets = targets
-
-    @property
     def testing_targets(self) -> pd.Series:
         '''Getter for the testing targets property.'''
 
@@ -152,30 +123,6 @@ class KNNHarness:
         '''Setter for the testing_targets property.'''
 
         self._testing_targets = targets
-
-    @property
-    def merged_val_training_data(self) -> np.ndarray:
-        '''Getter for the merged_val_training_data property.'''
-
-        return self._merged_val_training_data
-
-    @merged_val_training_data.setter
-    def merged_val_training_data(self, data: np.ndarray) -> None:
-        '''Setter for the merged_val_training_data property.'''
-
-        self._merged_val_training_data = data
-
-    @property
-    def merged_val_training_targets(self) -> np.ndarray:
-        '''Getter for the merged_val_training_targets property.'''
-
-        return self._merged_val_training_targets
-
-    @merged_val_training_targets.setter
-    def merged_val_training_targets(self, targets: np.ndarray) -> None:
-        '''Setter for the merged_val_training_targets property'''
-
-        self._merged_val_training_targets = targets
 
     @property
     def best_k(self) -> int:
@@ -216,31 +163,28 @@ class KNNHarness:
         # Drop rows containing NaN.
         dataset.dropna(inplace=True)
 
-        # Split dataset into training, validation, and test datasets.
-        training_data, validation_data, testing_data = self._split_dataset(
+        training_data: pd.DataFrame
+        testing_data: pd.DataFrame
+
+        # Split dataset into training and test datasets.
+        training_data, testing_data = self._split_dataset(
             dataset, self.test_size)
 
         # Reset the indices.
         training_data.reset_index(inplace=True, drop=True)
-        validation_data.reset_index(inplace=True, drop=True)
         testing_data.reset_index(inplace=True, drop=True)
 
         # Get targets for each of the subsets of the data.
         training_targets = training_data[self.target_column_name]
-        validation_targets = validation_data[self.target_column_name]
         testing_targets = testing_data[self.target_column_name]
 
         # Exclude targets from features.
         training_data = training_data.drop(columns=[self.target_column_name])
-        validation_data = validation_data.drop(
-            columns=[self.target_column_name])
         testing_data = testing_data.drop(columns=[self.target_column_name])
 
         # Preprocess split datasets.
         training_data_scaled, training_cols, scaler = self._preprocess_dataset(
             training_data)
-        validation_data_scaled, _, _ = self._preprocess_dataset(
-            validation_data, training_cols, scaler)
         testing_data_scaled, _, _ = self._preprocess_dataset(
             testing_data, training_cols, scaler)
 
@@ -248,10 +192,8 @@ class KNNHarness:
 
         # Set class instance properties.
         self.training_data = training_data_scaled
-        self.validation_data = validation_data_scaled
         self.testing_data = testing_data_scaled
         self.training_targets = training_targets_np
-        self.validation_targets = validation_targets
         self.testing_targets = testing_targets
 
     def _get_candidate_k_values(self, num_examples: int) -> list[int]:
@@ -309,28 +251,22 @@ class KNNHarness:
         dataset: pd.DataFrame,
         test_size: float = 0.2,
     ) -> list[pd.DataFrame]:
-        '''Splits dataset into training, validation and test sets.
+        '''Splits dataset into training and test sets.
 
         Keyword arguments:
-        dataset -- the dataset to split. 
-        test_size -- fraction of data to use for testing (same fig used for validation).
+        dataset -- the dataset to split. )
+        test_size -- fraction of data to use for testing.
         '''
 
-        # Split dataset into training+validation and test sets.
-        training_validation_data, testing_data = train_test_split(
+        training_data: pd.DataFrame
+        testing_data: pd.DataFrame
+
+        # Split dataset into training and test sets.
+        training_data, testing_data = train_test_split(
             dataset, test_size=test_size, random_state=42
         )
 
-        # Get validation size (should be same percentage as size as testing data).
-        validation_size: float = len(
-            testing_data) / len(training_validation_data)
-
-        # Split training+validation data into training and validation sets.
-        training_data, validation_data = train_test_split(
-            training_validation_data, test_size=validation_size, random_state=42
-        )
-
-        return [training_data, validation_data, testing_data]
+        return [training_data, testing_data]
 
     def _preprocess_dataset(
         self,
@@ -529,69 +465,85 @@ class KNNHarness:
 
         # Return the accuracy.
         return accuracy
-    
+
     def _get_best_k_for_regressor(self) -> int:
-        '''Returns the best k found for KNN regression on the validation set.'''
+        '''Returns best k found for regression using 5-fold cross-validation.'''
 
         best_k: int
+        best_avg_mae: float = float('inf')
 
-        # Set the best_mae to positive infinity.
-        best_mae_for_validation: float = float('inf')
+        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
 
-        # For each canidate k value, get its MAE.
+        # For each candidate k value
         for candidate_k in self.candidate_k_values:
+            total_mae: float = 0.0
 
-            mae: float = self.get_mae_of_knn_regressor(
-                candidate_k, self.training_data,
-                self.validation_data, self.training_targets,
-                self.validation_targets
-            )
+            # For each fold, train the model with 4 folds and validate with remaining.
+            for train_idx, val_idx in kfold.split(self.training_data):
+                train_data, val_data = self.training_data[
+                    train_idx], self.training_data[val_idx]
+                train_targets, val_targets = self.training_targets[
+                    train_idx], self.training_targets[val_idx]
 
-            # If better than best, update best_mae and best_k.
-            if mae < best_mae_for_validation:
-                best_mae_for_validation = mae
+                mae: float = self.get_mae_of_knn_regressor(
+                    candidate_k, train_data, val_data, train_targets, val_targets)
+                total_mae += mae
+
+            avg_mae = total_mae / kfold.get_n_splits()
+
+            # If better than best, update best_avg_mae and best_k.
+            if avg_mae < best_avg_mae:
+                best_avg_mae = avg_mae
                 best_k = candidate_k
 
         # Default value for best_k if left undefined.
         if not best_k:
             best_k = 3
-        
+
+        print(best_k)
+
         return best_k
-    
+
     def _evaluate_regressor(self) -> float:
         '''Returns error of KNN regressor on the test set.'''
 
         self.best_k = self._get_best_k_for_regressor()
 
-        # Merge validation and training data so we have more data for testing.
-        self.merged_val_training_data = np.vstack(
-            [self._training_data, self.validation_data])
-        self.merged_val_training_targets = np.concatenate(
-            [self.training_targets, self.validation_targets])
-        # Get MAE of test data when neighbors are gotten from training + validation.
+        # Get MAE of test data when neighbors are gotten from training data.
         return self.get_mae_of_knn_regressor(
-            self.best_k, self.merged_val_training_data,
-            self.testing_data, self.merged_val_training_targets,
+            self.best_k, self.training_data,
+            self.testing_data, self.training_targets,
             self.testing_targets
         )
-    
+
     def _get_best_k_for_classifier(self) -> int:
-        '''Returns the best k found for KNN classification on the validation set.'''
+        '''Returns the best k found for classification using 5-fold cross-validation.'''
 
-        # Set the best_accuracy to positive infinity.
-        best_accuracy_for_validation: float = float('-inf')
+        best_k: int
+        best_avg_accuracy: float = float('-inf')
 
-        # For each canidate k value, get its accuracy.
+        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+
+        # For each candidate k value
         for candidate_k in self.candidate_k_values:
+            total_accuracy: float = 0.0
 
-            accuracy: float = self.get_accuracy_of_knn_classifier(
-                candidate_k, self.training_data,
-                self.validation_data, self.training_targets,
-                self.validation_targets)
+            # For each fold, train the model with 4 folds and validate with remaining.
+            for train_idx, val_idx in kfold.split(self.training_data):
+                train_data, val_data = self.training_data[
+                    train_idx], self.training_data[val_idx]
+                train_targets, val_targets = self.training_targets[
+                    train_idx], self.training_targets[val_idx]
 
-            # If better than best, update best_accuracy and best_k.
-            if accuracy > best_accuracy_for_validation:
-                best_accuracy_for_validation = accuracy
+                accuracy: float = self.get_accuracy_of_knn_classifier(
+                    candidate_k, train_data, val_data, train_targets, val_targets)
+                total_accuracy += accuracy
+
+            avg_accuracy = total_accuracy / kfold.get_n_splits()
+
+            # If better than best, update best_avg_accuracy and best_k.
+            if avg_accuracy > best_avg_accuracy:
+                best_avg_accuracy = avg_accuracy
                 best_k = candidate_k
 
         # Default value for best_k if left undefined.
@@ -600,22 +552,15 @@ class KNNHarness:
 
         return best_k
 
-    
     def _evaluate_classifier(self) -> float:
         '''Returns accuracy of KNN classifier on the test set.'''
-        
-        self.best_k = self._get_best_k_for_classifier()
 
-        # Merge validation and training data so we have more data for testing.
-        self.merged_val_training_data = np.vstack(
-            [self.training_data, self.validation_data])
-        self.merged_val_training_targets = np.concatenate(
-            [self.training_targets, self.validation_targets])
+        self.best_k = self._get_best_k_for_classifier()
 
         # Get MAE of test data when neighbors are gotten from training + validation.
         return self.get_accuracy_of_knn_classifier(
-            self.best_k, self.merged_val_training_data,
-            self.testing_data, self.merged_val_training_targets,
+            self.best_k, self.training_data,
+            self.testing_data, self.training_targets,
             self.testing_targets
         )
 
@@ -627,6 +572,7 @@ class KNNHarness:
         else:
             return self._evaluate_classifier()
 
-#test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-#test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+
+# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+# test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
 #print(test.evaluate())
