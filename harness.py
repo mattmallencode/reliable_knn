@@ -44,7 +44,9 @@ class KNNHarness:
         # Value of the best_k (to be validated later).
         self._best_k: int = 3
         self._candidate_k_values: list[int] = [3]
-        self._load_split_and_preprocess_data()
+        self._dataset: pd.DataFrame = pd.DataFrame()
+        self._dataset_targets: pd.Series = pd.Series()
+        self._load_dataset()
 
     @property
     def regressor_or_classifier(self) -> str:
@@ -147,8 +149,32 @@ class KNNHarness:
 
         self._candidate_k_values = values
 
-    def _load_split_and_preprocess_data(self) -> None:
-        '''Loads, splits, and preprocesses dataset.'''
+    @property
+    def dataset(self) -> pd.DataFrame:
+        '''Getter for the dataset property.'''
+
+        return self._dataset
+
+    @dataset.setter
+    def dataset(self, data: pd.DataFrame) -> None:
+        '''Setter for the dataset property'''
+
+        self._dataset = data
+
+    @property
+    def dataset_targets(self) -> pd.Series:
+        '''Getter for the dataset_targets property.'''
+
+        return self._dataset_targets
+
+    @dataset_targets.setter
+    def dataset_targets(self, targets: pd.Series) -> None:
+        '''Setter for the dataset_targets property'''
+
+        self._dataset_targets = targets
+
+    def _load_dataset(self) -> None:
+        '''Loads dataset into a DataFrame and extracts target Series.'''
 
         # First the load the dataset.
         dataset: pd.DataFrame = pd.read_csv(self.dataset_file_path)
@@ -163,38 +189,8 @@ class KNNHarness:
         # Drop rows containing NaN.
         dataset.dropna(inplace=True)
 
-        training_data: pd.DataFrame
-        testing_data: pd.DataFrame
-
-        # Split dataset into training and test datasets.
-        training_data, testing_data = self._split_dataset(
-            dataset, self.test_size)
-
-        # Reset the indices.
-        training_data.reset_index(inplace=True, drop=True)
-        testing_data.reset_index(inplace=True, drop=True)
-
-        # Get targets for each of the subsets of the data.
-        training_targets = training_data[self.target_column_name]
-        testing_targets = testing_data[self.target_column_name]
-
-        # Exclude targets from features.
-        training_data = training_data.drop(columns=[self.target_column_name])
-        testing_data = testing_data.drop(columns=[self.target_column_name])
-
-        # Preprocess split datasets.
-        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
-            training_data)
-        testing_data_scaled, _, _ = self._preprocess_dataset(
-            testing_data, training_cols, scaler)
-
-        training_targets_np: np.ndarray = training_targets.to_numpy()
-
-        # Set class instance properties.
-        self.training_data = training_data_scaled
-        self.testing_data = testing_data_scaled
-        self.training_targets = training_targets_np
-        self.testing_targets = testing_targets
+        self.dataset = dataset.drop(columns=[self.target_column_name])
+        self.dataset_targets = dataset[self.target_column_name]
 
     def _get_candidate_k_values(self, num_examples: int) -> list[int]:
         '''Returns a list of 5 candidate values for k for KNN based on num_examples.
@@ -248,25 +244,57 @@ class KNNHarness:
 
     def _split_dataset(
         self,
-        dataset: pd.DataFrame,
         test_size: float = 0.2,
-    ) -> list[pd.DataFrame]:
+    ) -> None:
         '''Splits dataset into training and test sets.
 
         Keyword arguments:
-        dataset -- the dataset to split. )
         test_size -- fraction of data to use for testing.
         '''
 
         training_data: pd.DataFrame
         testing_data: pd.DataFrame
+        training_targets: pd.Series
+        training_targets_np: np.ndarray
+        testing_targets: pd.Series
+        training_data_scaled: np.ndarray
+        testing_data_scaled: np.ndarray
+        training_cols: pd.Index
+        scaler: StandardScaler
+
+        dataset_with_targets: pd.DataFrame = self.dataset.copy()
+        dataset_with_targets[self.target_column_name] = self.dataset_targets
 
         # Split dataset into training and test sets.
         training_data, testing_data = train_test_split(
-            dataset, test_size=test_size, random_state=42
+            dataset_with_targets, test_size=test_size, random_state=42
         )
 
-        return [training_data, testing_data]
+        # Reset the indices.
+        training_data.reset_index(inplace=True, drop=True)
+        testing_data.reset_index(inplace=True, drop=True)
+
+        # Get targets for each of the subsets of the data.
+        training_targets = training_data[self.target_column_name]
+        testing_targets = testing_data[self.target_column_name]
+
+        # Exclude targets from features.
+        training_data = training_data.drop(columns=[self.target_column_name])
+        testing_data = testing_data.drop(columns=[self.target_column_name])
+
+        # Preprocess split datasets.
+        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
+            training_data)
+        testing_data_scaled, _, _ = self._preprocess_dataset(
+            testing_data, training_cols, scaler)
+
+        training_targets_np = training_targets.to_numpy()
+
+        # Set class instance properties.
+        self.training_data = training_data_scaled
+        self.testing_data = testing_data_scaled
+        self.training_targets = training_targets_np
+        self.testing_targets = testing_targets
 
     def _preprocess_dataset(
         self,
@@ -471,25 +499,61 @@ class KNNHarness:
 
         best_k: int
         best_avg_mae: float = float('inf')
-
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+        candidate_k: int
 
         # For each candidate k value
         for candidate_k in self.candidate_k_values:
+
             total_mae: float = 0.0
+            train_idx: np.ndarray
+            val_idx: np.ndarray
+            train_targets: pd.Series
+            val_targets: pd.Series
+            train_targets_np: np.ndarray
 
             # For each fold, train the model with 4 folds and validate with remaining.
-            for train_idx, val_idx in kfold.split(self.training_data):
-                train_data, val_data = self.training_data[
-                    train_idx], self.training_data[val_idx]
-                train_targets, val_targets = self.training_targets[
-                    train_idx], self.training_targets[val_idx]
+            for train_idx, val_idx in kfold.split(self.dataset):
+
+                train_data: pd.DataFrame
+                val_data: pd.DataFrame
+
+                # Split data
+                train_data, val_data = (
+                    self.dataset.iloc[train_idx].copy(),
+                    self.dataset.iloc[val_idx].copy()
+                )
+
+                train_data.reset_index(drop=True, inplace=True)
+                val_data.reset_index(drop=True, inplace=True)
+
+                train_targets, val_targets = self.dataset_targets.iloc[
+                    train_idx].copy(), self.dataset_targets.iloc[val_idx].copy()
+
+                train_targets.reset_index(drop=True, inplace=True)
+                val_targets.reset_index(drop=True, inplace=True)
+                train_targets_np = train_targets.to_numpy()
+                
+                train_data_scaled: np.ndarray
+                val_data_scaled: np.ndarray
+                training_cols: pd.Index
+                scaler: StandardScaler
+
+                # Preprocess the training data and apply transformations to val data.
+                train_data_scaled, training_cols, scaler = self._preprocess_dataset(
+                    train_data)
+
+                val_data_scaled, _, _ = self._preprocess_dataset(
+                    val_data, training_cols=training_cols, scaler=scaler)
 
                 mae: float = self.get_mae_of_knn_regressor(
-                    candidate_k, train_data, val_data, train_targets, val_targets)
+                    candidate_k, train_data_scaled,
+                    val_data_scaled, train_targets_np, val_targets
+                )
+
                 total_mae += mae
 
-            avg_mae = total_mae / kfold.get_n_splits()
+            avg_mae: float = total_mae / kfold.get_n_splits()
 
             # If better than best, update best_avg_mae and best_k.
             if avg_mae < best_avg_mae:
@@ -500,14 +564,14 @@ class KNNHarness:
         if not best_k:
             best_k = 3
 
-        print(best_k)
-
         return best_k
 
     def _evaluate_regressor(self) -> float:
         '''Returns error of KNN regressor on the test set.'''
 
         self.best_k = self._get_best_k_for_regressor()
+
+        self._split_dataset()
 
         # Get MAE of test data when neighbors are gotten from training data.
         return self.get_mae_of_knn_regressor(
@@ -526,20 +590,57 @@ class KNNHarness:
 
         # For each candidate k value
         for candidate_k in self.candidate_k_values:
+
             total_accuracy: float = 0.0
+            train_idx: np.ndarray
+            val_idx: np.ndarray
+            train_targets: pd.Series
+            val_targets: pd.Series
+            train_targets_np: np.ndarray
 
             # For each fold, train the model with 4 folds and validate with remaining.
-            for train_idx, val_idx in kfold.split(self.training_data):
-                train_data, val_data = self.training_data[
-                    train_idx], self.training_data[val_idx]
-                train_targets, val_targets = self.training_targets[
-                    train_idx], self.training_targets[val_idx]
+            for train_idx, val_idx in kfold.split(self.dataset):
+
+                train_data: pd.DataFrame
+                val_data: pd.DataFrame
+
+                # Split data
+                train_data, val_data = (
+                    self.dataset.iloc[train_idx].copy(),
+                    self.dataset.iloc[val_idx].copy()
+                )
+
+                train_data.reset_index(drop=True, inplace=True)
+                val_data.reset_index(drop=True, inplace=True)
+
+                train_targets, val_targets = (
+                    self.dataset_targets.iloc[train_idx].copy(),
+                    self.dataset_targets.iloc[val_idx].copy()
+                )
+
+                train_targets.reset_index(drop=True, inplace=True)
+                val_targets.reset_index(drop=True, inplace=True)
+                train_targets_np = train_targets.to_numpy()
+
+                train_data_scaled: np.ndarray
+                val_data_scaled: np.ndarray
+                training_cols: pd.Index
+                scaler: StandardScaler
+
+                # Preprocess the training data and apply transformations to val data.
+                train_data_scaled, training_cols, scaler = self._preprocess_dataset(
+                    train_data)
+                val_data_scaled, _, _ = self._preprocess_dataset(
+                    val_data, training_cols=training_cols, scaler=scaler)
 
                 accuracy: float = self.get_accuracy_of_knn_classifier(
-                    candidate_k, train_data, val_data, train_targets, val_targets)
+                    candidate_k, train_data_scaled,
+                    val_data_scaled, train_targets_np, val_targets
+                )
+
                 total_accuracy += accuracy
 
-            avg_accuracy = total_accuracy / kfold.get_n_splits()
+            avg_accuracy: float = total_accuracy / kfold.get_n_splits()
 
             # If better than best, update best_avg_accuracy and best_k.
             if avg_accuracy > best_avg_accuracy:
@@ -556,6 +657,8 @@ class KNNHarness:
         '''Returns accuracy of KNN classifier on the test set.'''
 
         self.best_k = self._get_best_k_for_classifier()
+
+        self._split_dataset()
 
         # Get MAE of test data when neighbors are gotten from training + validation.
         return self.get_accuracy_of_knn_classifier(
@@ -575,4 +678,4 @@ class KNNHarness:
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
 # test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-#print(test.evaluate())
+# print(test.evaluate())
