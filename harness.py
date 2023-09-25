@@ -37,9 +37,9 @@ class KNNHarness:
         self._target_column_name: str = target_column_name
         self._test_size: float = test_size
         self._missing_values: list[str] = missing_values
-        self._training_data: np.ndarray = np.ndarray([])
-        self._testing_data: np.ndarray = np.ndarray([])
-        self._training_targets: np.ndarray = np.ndarray([])
+        self._training_data: pd.DataFrame = pd.DataFrame()
+        self._testing_data: pd.DataFrame = pd.DataFrame()
+        self._training_targets: pd.Series = pd.Series()
         self._testing_targets: pd.Series = pd.Series()
         # Value of the best_k (to be validated later).
         self._best_k: int = 3
@@ -79,37 +79,37 @@ class KNNHarness:
         return self._missing_values
 
     @property
-    def training_data(self) -> np.ndarray:
+    def training_data(self) -> pd.DataFrame:
         '''Getter for the training_data property.'''
 
         return self._training_data
 
     @training_data.setter
-    def training_data(self, data: np.ndarray) -> None:
+    def training_data(self, data: pd.DataFrame) -> None:
         '''Setter for the training_data property.'''
 
         self._training_data = data
 
     @property
-    def testing_data(self) -> np.ndarray:
+    def testing_data(self) -> pd.DataFrame:
         '''Getter for the testing_data property.'''
 
         return self._testing_data
 
     @testing_data.setter
-    def testing_data(self, data: np.ndarray) -> None:
+    def testing_data(self, data: pd.DataFrame) -> None:
         '''Setter for the testing_data property.'''
 
         self._testing_data = data
 
     @property
-    def training_targets(self) -> np.ndarray:
+    def training_targets(self) -> pd.Series:
         '''Getter for the training_targets property.'''
 
         return self._training_targets
 
     @training_targets.setter
-    def training_targets(self, targets: np.ndarray) -> None:
+    def training_targets(self, targets: pd.Series) -> None:
         '''Setter for the training_targets property.'''
 
         self._training_targets = targets
@@ -255,12 +255,7 @@ class KNNHarness:
         training_data: pd.DataFrame
         testing_data: pd.DataFrame
         training_targets: pd.Series
-        training_targets_np: np.ndarray
         testing_targets: pd.Series
-        training_data_scaled: np.ndarray
-        testing_data_scaled: np.ndarray
-        training_cols: pd.Index
-        scaler: StandardScaler
 
         dataset_with_targets: pd.DataFrame = self.dataset.copy()
         dataset_with_targets[self.target_column_name] = self.dataset_targets
@@ -282,18 +277,10 @@ class KNNHarness:
         training_data = training_data.drop(columns=[self.target_column_name])
         testing_data = testing_data.drop(columns=[self.target_column_name])
 
-        # Preprocess split datasets.
-        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
-            training_data)
-        testing_data_scaled, _, _ = self._preprocess_dataset(
-            testing_data, training_cols, scaler)
-
-        training_targets_np = training_targets.to_numpy()
-
         # Set class instance properties.
-        self.training_data = training_data_scaled
-        self.testing_data = testing_data_scaled
-        self.training_targets = training_targets_np
+        self.training_data = training_data
+        self.testing_data = testing_data
+        self.training_targets = training_targets
         self.testing_targets = testing_targets
 
     def _preprocess_dataset(
@@ -573,10 +560,21 @@ class KNNHarness:
 
         self._split_dataset()
 
+        training_data_scaled: np.ndarray
+        testing_data_scaled: np.ndarray
+        training_cols: pd.Index
+        scaler: StandardScaler
+
+        # Preprocess split datasets.
+        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
+            self.training_data)
+        testing_data_scaled, _, _ = self._preprocess_dataset(
+            self.testing_data, training_cols, scaler)
+
         # Get MAE of test data when neighbors are gotten from training data.
         return self.get_mae_of_knn_regressor(
-            self.best_k, self.training_data,
-            self.testing_data, self.training_targets,
+            self.best_k, training_data_scaled,
+            testing_data_scaled, self.training_targets.to_numpy(),
             self.testing_targets
         )
 
@@ -660,10 +658,21 @@ class KNNHarness:
 
         self._split_dataset()
 
+        training_data_scaled: np.ndarray
+        testing_data_scaled: np.ndarray
+        training_cols: pd.Index
+        scaler: StandardScaler
+
+        # Preprocess split datasets.
+        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
+            self.training_data)
+        testing_data_scaled, _, _ = self._preprocess_dataset(
+            self.testing_data, training_cols, scaler)
+
         # Get MAE of test data when neighbors are gotten from training + validation.
         return self.get_accuracy_of_knn_classifier(
-            self.best_k, self.training_data,
-            self.testing_data, self.training_targets,
+            self.best_k, training_data_scaled,
+            testing_data_scaled, self.training_targets.to_numpy(),
             self.testing_targets
         )
 
