@@ -245,11 +245,13 @@ class KNNHarness:
     def _split_dataset(
         self,
         test_size: float = 0.2,
+        random_state: int = 42
     ) -> None:
         '''Splits dataset into training and test sets.
 
         Keyword arguments:
         test_size -- fraction of data to use for testing.
+        random_state -- the random_state to use for splitting.
         '''
 
         training_data: pd.DataFrame
@@ -262,7 +264,7 @@ class KNNHarness:
 
         # Split dataset into training and test sets.
         training_data, testing_data = train_test_split(
-            dataset_with_targets, test_size=test_size, random_state=42
+            dataset_with_targets, test_size=test_size, random_state=random_state
         )
 
         # Reset the indices.
@@ -654,27 +656,38 @@ class KNNHarness:
     def _evaluate_classifier(self) -> float:
         '''Returns accuracy of KNN classifier on the test set.'''
 
-        self._split_dataset()
+        # Random states to use for repeated holdout.
+        random_states: list[int] = [22, 32, 42, 52, 62]
 
-        self.best_k = self._get_best_k_for_classifier()
+        total_accuracy: float = 0
 
-        training_data_scaled: np.ndarray
-        testing_data_scaled: np.ndarray
-        training_cols: pd.Index
-        scaler: StandardScaler
+        # Repeated holdout with k-fold cross validation nested inside.
+        for random_state in random_states:
 
-        # Preprocess split datasets.
-        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
-            self.training_data)
-        testing_data_scaled, _, _ = self._preprocess_dataset(
-            self.testing_data, training_cols, scaler)
+            self._split_dataset(random_state=random_state)
 
-        # Get MAE of test data when neighbors are gotten from training + validation.
-        return self.get_accuracy_of_knn_classifier(
-            self.best_k, training_data_scaled,
-            testing_data_scaled, self.training_targets.to_numpy(),
-            self.testing_targets
-        )
+            self.best_k = self._get_best_k_for_classifier()
+
+            training_data_scaled: np.ndarray
+            testing_data_scaled: np.ndarray
+            training_cols: pd.Index
+            scaler: StandardScaler
+
+            # Preprocess split datasets.
+            training_data_scaled, training_cols, scaler = self._preprocess_dataset(
+                self.training_data)
+            testing_data_scaled, _, _ = self._preprocess_dataset(
+                self.testing_data, training_cols, scaler)
+
+            # Get MAE of test data when neighbors are gotten from training + validation.
+            total_accuracy += self.get_accuracy_of_knn_classifier(
+                self.best_k, training_data_scaled,
+                testing_data_scaled, self.training_targets.to_numpy(),
+                self.testing_targets
+            )
+
+        # Did 5 repeated holdouts, return average accuracy.
+        return total_accuracy / 5
 
     def evaluate(self) -> float:
         '''Returns error or accuracy rate (depending on task) of kNN on the dataset.'''
@@ -685,6 +698,6 @@ class KNNHarness:
             return self._evaluate_classifier()
 
 
-test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-print(test.evaluate())
+# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+# test = KNNHarness('classifier', 'datasets/iris.data', 'class')
+# print(test.evaluate())
