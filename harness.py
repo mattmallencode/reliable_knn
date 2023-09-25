@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split, KFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler  # type: ignore
-
+from tqdm import tqdm
 
 class KNNHarness:
 
@@ -558,27 +558,38 @@ class KNNHarness:
     def _evaluate_regressor(self) -> float:
         '''Returns error of KNN regressor on the test set.'''
 
-        self._split_dataset()
+        # Random states to use for repeated holdout.
+        random_states: list[int] = [22, 32, 42, 52, 62]
 
-        self.best_k = self._get_best_k_for_regressor()
+        total_mae: float = 0
 
-        training_data_scaled: np.ndarray
-        testing_data_scaled: np.ndarray
-        training_cols: pd.Index
-        scaler: StandardScaler
+        # Repeated holdout with k-fold cross validation nested inside.
+        # tqdm provides progress bar.
+        for random_state in tqdm(random_states):
+            
+            self._split_dataset(random_state=random_state)
 
-        # Preprocess split datasets.
-        training_data_scaled, training_cols, scaler = self._preprocess_dataset(
-            self.training_data)
-        testing_data_scaled, _, _ = self._preprocess_dataset(
-            self.testing_data, training_cols, scaler)
+            self.best_k = self._get_best_k_for_regressor()
 
-        # Get MAE of test data when neighbors are gotten from training data.
-        return self.get_mae_of_knn_regressor(
-            self.best_k, training_data_scaled,
-            testing_data_scaled, self.training_targets.to_numpy(),
-            self.testing_targets
-        )
+            training_data_scaled: np.ndarray
+            testing_data_scaled: np.ndarray
+            training_cols: pd.Index
+            scaler: StandardScaler
+
+            # Preprocess split datasets.
+            training_data_scaled, training_cols, scaler = self._preprocess_dataset(
+                self.training_data)
+            testing_data_scaled, _, _ = self._preprocess_dataset(
+                self.testing_data, training_cols, scaler)
+
+            # Get MAE of test data when neighbors are gotten from train+val.
+            total_mae += self.get_mae_of_knn_regressor(
+                self.best_k, training_data_scaled,
+                testing_data_scaled, self.training_targets.to_numpy(),
+                self.testing_targets
+            )
+        
+        return total_mae / 5
 
     def _get_best_k_for_classifier(self) -> int:
         '''Returns the best k found for classification using 5-fold cross-validation.'''
@@ -662,7 +673,8 @@ class KNNHarness:
         total_accuracy: float = 0
 
         # Repeated holdout with k-fold cross validation nested inside.
-        for random_state in random_states:
+        # tqdm provides progress bar.
+        for random_state in tqdm(random_states):
 
             self._split_dataset(random_state=random_state)
 
@@ -679,7 +691,7 @@ class KNNHarness:
             testing_data_scaled, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
 
-            # Get MAE of test data when neighbors are gotten from training + validation.
+            # Get accuracy of test data when neighbors are gotten from train+val.
             total_accuracy += self.get_accuracy_of_knn_classifier(
                 self.best_k, training_data_scaled,
                 testing_data_scaled, self.training_targets.to_numpy(),
