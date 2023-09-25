@@ -500,22 +500,22 @@ class KNNHarness:
             train_targets_np: np.ndarray
 
             # For each fold, train the model with 4 folds and validate with remaining.
-            for train_idx, val_idx in kfold.split(self.dataset):
+            for train_idx, val_idx in kfold.split(self.training_data):
 
                 train_data: pd.DataFrame
                 val_data: pd.DataFrame
 
                 # Split data
                 train_data, val_data = (
-                    self.dataset.iloc[train_idx].copy(),
-                    self.dataset.iloc[val_idx].copy()
+                    self.training_data.iloc[train_idx].copy(),
+                    self.training_data.iloc[val_idx].copy()
                 )
 
                 train_data.reset_index(drop=True, inplace=True)
                 val_data.reset_index(drop=True, inplace=True)
 
-                train_targets, val_targets = self.dataset_targets.iloc[
-                    train_idx].copy(), self.dataset_targets.iloc[val_idx].copy()
+                train_targets, val_targets = self.training_targets.iloc[
+                    train_idx].copy(), self.training_targets.iloc[val_idx].copy()
 
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
@@ -556,9 +556,9 @@ class KNNHarness:
     def _evaluate_regressor(self) -> float:
         '''Returns error of KNN regressor on the test set.'''
 
-        self.best_k = self._get_best_k_for_regressor()
-
         self._split_dataset()
+
+        self.best_k = self._get_best_k_for_regressor()
 
         training_data_scaled: np.ndarray
         testing_data_scaled: np.ndarray
@@ -597,23 +597,23 @@ class KNNHarness:
             train_targets_np: np.ndarray
 
             # For each fold, train the model with 4 folds and validate with remaining.
-            for train_idx, val_idx in kfold.split(self.dataset):
+            for train_idx, val_idx in kfold.split(self.training_data):
 
                 train_data: pd.DataFrame
                 val_data: pd.DataFrame
 
                 # Split data
                 train_data, val_data = (
-                    self.dataset.iloc[train_idx].copy(),
-                    self.dataset.iloc[val_idx].copy()
+                    self.training_data.iloc[train_idx].copy(),
+                    self.training_data.iloc[val_idx].copy()
                 )
 
                 train_data.reset_index(drop=True, inplace=True)
                 val_data.reset_index(drop=True, inplace=True)
 
                 train_targets, val_targets = (
-                    self.dataset_targets.iloc[train_idx].copy(),
-                    self.dataset_targets.iloc[val_idx].copy()
+                    self.training_targets.iloc[train_idx].copy(),
+                    self.training_targets.iloc[val_idx].copy()
                 )
 
                 train_targets.reset_index(drop=True, inplace=True)
@@ -654,9 +654,9 @@ class KNNHarness:
     def _evaluate_classifier(self) -> float:
         '''Returns accuracy of KNN classifier on the test set.'''
 
-        self.best_k = self._get_best_k_for_classifier()
-
         self._split_dataset()
+
+        self.best_k = self._get_best_k_for_classifier()
 
         training_data_scaled: np.ndarray
         testing_data_scaled: np.ndarray
@@ -685,6 +685,6 @@ class KNNHarness:
             return self._evaluate_classifier()
 
 
-# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
 # test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-# print(test.evaluate())
+print(test.evaluate())
