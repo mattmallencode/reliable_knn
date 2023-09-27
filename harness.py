@@ -5,6 +5,7 @@ from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler  # type: ignore
 from tqdm import tqdm
 
+
 class KNNHarness:
 
     def __init__(
@@ -15,11 +16,11 @@ class KNNHarness:
             test_size: float = 0.2,
             missing_values: list[str] = ['?']
     ):
-        '''Initialises a KNN Harness.
+        '''Initialises a kNN Harness.
 
         Keyword arguments:
-        regressor_or_classifier -- what KNN it runs 'regressor' | 'classifier'.
-        dataset_file_path -- file path to the dataset to run the KNN on.
+        regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
+        dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
         test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
@@ -378,10 +379,11 @@ class KNNHarness:
         '''
 
         # Compute euclidean distances using vectorized operations.
-        distances = np.sqrt(np.sum((dataset - example_to_predict)**2, axis=1))
+        distances: np.ndarray = np.sqrt(
+            np.sum((dataset - example_to_predict)**2, axis=1))
 
         # Get indices of the k smallest distances.
-        indices = np.argpartition(distances, k)[:k]
+        indices: np.ndarray = np.argpartition(distances, k)[:k]
 
         # Return mean of corresponding target values.
         return float(target_column[indices].mean())
@@ -403,14 +405,18 @@ class KNNHarness:
         '''
 
         # Compute euclidean distances using vectorized operations.
-        distances = np.sqrt(np.sum((dataset - example_to_predict)**2, axis=1))
+        distances: np.ndarray = np.sqrt(
+            np.sum((dataset - example_to_predict)**2, axis=1))
 
         # Get indices of the k smallest distances
-        indices = np.argpartition(distances, k)[:k]
+        indices: np.ndarray = np.argpartition(distances, k)[:k]
+
+        values: np.ndarray
+        counts: np.ndarray
 
         # Find the mode of the target values
         values, counts = np.unique(target_column[indices], return_counts=True)
-        most_frequent = values[np.argmax(counts)]
+        most_frequent: str = values[np.argmax(counts)]
 
         # Return most common class of corresponding target values.
         return most_frequent
@@ -522,7 +528,7 @@ class KNNHarness:
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
                 train_targets_np = train_targets.to_numpy()
-                
+
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
                 training_cols: pd.Index
@@ -566,7 +572,7 @@ class KNNHarness:
         # Repeated holdout with k-fold cross validation nested inside.
         # tqdm provides progress bar.
         for random_state in tqdm(random_states):
-            
+
             self._split_dataset(random_state=random_state)
 
             self.best_k = self._get_best_k_for_regressor()
@@ -588,7 +594,7 @@ class KNNHarness:
                 testing_data_scaled, self.training_targets.to_numpy(),
                 self.testing_targets
             )
-        
+
         return total_mae / 5
 
     def _get_best_k_for_classifier(self) -> int:
