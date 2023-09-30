@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, KFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
-from sklearn.preprocessing import StandardScaler  # type: ignore
+from sklearn.preprocessing import StandardScaler, LabelEncoder  # type: ignore
 from tqdm import tqdm
 
 
@@ -290,15 +290,21 @@ class KNNHarness:
         self,
         dataset: pd.DataFrame,
         training_cols: pd.Index | None = None,
-        scaler: StandardScaler | None = None
-    ) -> tuple[np.ndarray, pd.Index, StandardScaler]:
+        scaler: StandardScaler | None = None,
+        training_targets: pd.Series = pd.Series(),
+    ) -> tuple[np.ndarray, np.ndarray, pd.Index, StandardScaler]:
         '''Preprocesses data and returns the cols and scaler used for the dataset.
 
         Keyword arguments:
         dataset -- the dataset we wish to preprocess.
         training_cols -- defaults to None; used to account for missing cols post split.
         scaler -- the StandardScaler used to scale the data, init if None is passed.
+        training_targets -- target series for training data (empty if val or test).
         '''
+
+        # If empty, just set training targets to the class attribute.
+        if len(training_targets) == 0:
+            training_targets = self.training_targets
 
         # Columns to one-hot encode.
         cols_to_encode: list[str] = []
@@ -331,7 +337,7 @@ class KNNHarness:
         else:
             dataset_scaled = scaler.transform(dataset)
 
-        return (dataset_scaled, training_cols, scaler)
+        return (dataset_scaled, training_targets.to_numpy(), training_cols, scaler)
 
     def _align_test_cols(
         self,
@@ -394,7 +400,7 @@ class KNNHarness:
             dataset: np.ndarray,
             target_column: np.ndarray,
             k: int = 3
-    ) -> str:
+    ) -> float:
         '''Predicts the class label of an example using kNN.
 
         Keyword arguments:
@@ -416,7 +422,7 @@ class KNNHarness:
 
         # Find the mode of the target values
         values, counts = np.unique(target_column[indices], return_counts=True)
-        most_frequent: str = values[np.argmax(counts)]
+        most_frequent: float = values[np.argmax(counts)]
 
         # Return most common class of corresponding target values.
         return most_frequent
@@ -462,7 +468,7 @@ class KNNHarness:
             testing_dataset: np.ndarray,
             training_targets: np.ndarray,
             testing_targets: pd.Series
-    ):
+    ) -> float:
         '''Returns the accuracy of a KNN classifier.
 
         Keyword arguments:
@@ -474,12 +480,12 @@ class KNNHarness:
         '''
 
         # Create a list to store predictions for each example in the testing data.
-        predictions: list[str] = []
+        predictions: list[float] = []
 
         # For each example in the testing data.
         for example in testing_dataset:
             # Predict the class for this example using the kNN classifier.
-            predicted_class: str = self.knn_classifier(
+            predicted_class: float = self.knn_classifier(
                 example, training_dataset, training_targets, k)
             predictions.append(predicted_class)
 
@@ -527,7 +533,6 @@ class KNNHarness:
 
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
-                train_targets_np = train_targets.to_numpy()
 
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
@@ -535,10 +540,14 @@ class KNNHarness:
                 scaler: StandardScaler
 
                 # Preprocess the training data and apply transformations to val data.
-                train_data_scaled, training_cols, scaler = self._preprocess_dataset(
-                    train_data)
+                (
+                    train_data_scaled,
+                    train_targets_np,
+                    training_cols,
+                    scaler
+                ) = self._preprocess_dataset(train_data, training_targets=train_targets)
 
-                val_data_scaled, _, _ = self._preprocess_dataset(
+                val_data_scaled, _, _, _ = self._preprocess_dataset(
                     val_data, training_cols=training_cols, scaler=scaler)
 
                 mae: float = self.get_mae_of_knn_regressor(
@@ -580,18 +589,25 @@ class KNNHarness:
             training_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
             training_cols: pd.Index
+            training_targets: np.ndarray
             scaler: StandardScaler
 
             # Preprocess split datasets.
-            training_data_scaled, training_cols, scaler = self._preprocess_dataset(
-                self.training_data)
-            testing_data_scaled, _, _ = self._preprocess_dataset(
+            (
+                training_data_scaled,
+                training_targets,
+                training_cols,
+                scaler
+            ) = self._preprocess_dataset(self.training_data)
+
+            testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
 
             # Get MAE of test data when neighbors are gotten from train+val.
             total_mae += self.get_mae_of_knn_regressor(
                 self.best_k, training_data_scaled,
-                testing_data_scaled, self.training_targets.to_numpy(),
+                testing_data_scaled,
+                training_targets,
                 self.testing_targets
             )
 
@@ -637,7 +653,12 @@ class KNNHarness:
 
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
-                train_targets_np = train_targets.to_numpy()
+
+                # Encode with integers to avoid expensive string comparisons.
+                label_encoder: LabelEncoder = LabelEncoder()
+                label_encoder.fit(train_targets)
+                train_targets = pd.Series(label_encoder.transform(train_targets))
+                val_targets = pd.Series(label_encoder.transform(val_targets))
 
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
@@ -645,9 +666,14 @@ class KNNHarness:
                 scaler: StandardScaler
 
                 # Preprocess the training data and apply transformations to val data.
-                train_data_scaled, training_cols, scaler = self._preprocess_dataset(
-                    train_data)
-                val_data_scaled, _, _ = self._preprocess_dataset(
+                (
+                    train_data_scaled,
+                    train_targets_np,
+                    training_cols,
+                    scaler
+                ) = self._preprocess_dataset(train_data, training_targets=train_targets)
+
+                val_data_scaled, _, _, _ = self._preprocess_dataset(
                     val_data, training_cols=training_cols, scaler=scaler)
 
                 accuracy: float = self.get_accuracy_of_knn_classifier(
@@ -688,19 +714,35 @@ class KNNHarness:
 
             training_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
+            training_targets: np.ndarray
             training_cols: pd.Index
             scaler: StandardScaler
 
             # Preprocess split datasets.
-            training_data_scaled, training_cols, scaler = self._preprocess_dataset(
-                self.training_data)
-            testing_data_scaled, _, _ = self._preprocess_dataset(
+            (
+                training_data_scaled,
+                training_targets,
+                training_cols,
+                scaler
+            ) = self._preprocess_dataset(self.training_data)
+
+            testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
+
+            # If classification, encode target col w/ ints = less expensive comparisons.
+            if self.regressor_or_classifier == 'classifier':
+                label_encoder = LabelEncoder()
+                label_encoder.fit(self.training_targets)
+                training_targets = pd.Series(
+                    label_encoder.transform(self.training_targets))
+                self.testing_targets = pd.Series(
+                    label_encoder.transform(self.testing_targets))
 
             # Get accuracy of test data when neighbors are gotten from train+val.
             total_accuracy += self.get_accuracy_of_knn_classifier(
                 self.best_k, training_data_scaled,
-                testing_data_scaled, self.training_targets.to_numpy(),
+                testing_data_scaled,
+                training_targets,
                 self.testing_targets
             )
 
