@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, KFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
-from sklearn.preprocessing import StandardScaler  # type: ignore
+from sklearn.preprocessing import StandardScaler, LabelEncoder  # type: ignore
 from tqdm import tqdm
 
 
@@ -400,7 +400,7 @@ class KNNHarness:
             dataset: np.ndarray,
             target_column: np.ndarray,
             k: int = 3
-    ) -> str:
+    ) -> float:
         '''Predicts the class label of an example using kNN.
 
         Keyword arguments:
@@ -422,7 +422,15 @@ class KNNHarness:
 
         # Find the mode of the target values
         values, counts = np.unique(target_column[indices], return_counts=True)
-        most_frequent: str = values[np.argmax(counts)]
+
+        # Get indices of max counts.
+        max_indices: np.ndarray = np.argwhere(
+            counts == np.amax(counts)).flatten()
+
+        # Pick one at random (handles cases where there's a tie).
+        random_index = np.random.choice(max_indices)
+
+        most_frequent: float = values[random_index]
 
         # Return most common class of corresponding target values.
         return most_frequent
@@ -468,7 +476,7 @@ class KNNHarness:
             testing_dataset: np.ndarray,
             training_targets: np.ndarray,
             testing_targets: pd.Series
-    ):
+    ) -> float:
         '''Returns the accuracy of a KNN classifier.
 
         Keyword arguments:
@@ -480,12 +488,12 @@ class KNNHarness:
         '''
 
         # Create a list to store predictions for each example in the testing data.
-        predictions: list[str] = []
+        predictions: list[float] = []
 
         # For each example in the testing data.
         for example in testing_dataset:
             # Predict the class for this example using the kNN classifier.
-            predicted_class: str = self.knn_classifier(
+            predicted_class: float = self.knn_classifier(
                 example, training_dataset, training_targets, k)
             predictions.append(predicted_class)
 
@@ -654,6 +662,13 @@ class KNNHarness:
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
 
+                # Encode with integers to avoid expensive string comparisons.
+                label_encoder: LabelEncoder = LabelEncoder()
+                label_encoder.fit(train_targets)
+                train_targets = pd.Series(
+                    label_encoder.transform(train_targets))
+                val_targets = pd.Series(label_encoder.transform(val_targets))
+
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
                 training_cols: pd.Index
@@ -722,6 +737,15 @@ class KNNHarness:
 
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
+
+            # If classification, encode target col w/ ints = less expensive comparisons.
+            if self.regressor_or_classifier == 'classifier':
+                label_encoder: LabelEncoder = LabelEncoder()
+                label_encoder.fit(self.training_targets)
+                training_targets = pd.Series(
+                    label_encoder.transform(self.training_targets))
+                self.testing_targets = pd.Series(
+                    label_encoder.transform(self.testing_targets))
 
             # Get accuracy of test data when neighbors are gotten from train+val.
             total_accuracy += self.get_accuracy_of_knn_classifier(
