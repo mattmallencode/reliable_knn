@@ -422,7 +422,15 @@ class KNNHarness:
 
         # Find the mode of the target values
         values, counts = np.unique(target_column[indices], return_counts=True)
-        most_frequent: float = values[np.argmax(counts)]
+
+        # Get indices of max counts.
+        max_indices: np.ndarray = np.argwhere(
+            counts == np.amax(counts)).flatten()
+
+        # Pick one at random (handles cases where there's a tie).
+        random_index = np.random.choice(max_indices)
+
+        most_frequent: float = values[random_index]
 
         # Return most common class of corresponding target values.
         return most_frequent
@@ -657,7 +665,8 @@ class KNNHarness:
                 # Encode with integers to avoid expensive string comparisons.
                 label_encoder: LabelEncoder = LabelEncoder()
                 label_encoder.fit(train_targets)
-                train_targets = pd.Series(label_encoder.transform(train_targets))
+                train_targets = pd.Series(
+                    label_encoder.transform(train_targets))
                 val_targets = pd.Series(label_encoder.transform(val_targets))
 
                 train_data_scaled: np.ndarray
@@ -731,7 +740,7 @@ class KNNHarness:
 
             # If classification, encode target col w/ ints = less expensive comparisons.
             if self.regressor_or_classifier == 'classifier':
-                label_encoder = LabelEncoder()
+                label_encoder: LabelEncoder = LabelEncoder()
                 label_encoder.fit(self.training_targets)
                 training_targets = pd.Series(
                     label_encoder.transform(self.training_targets))
