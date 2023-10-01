@@ -44,6 +44,8 @@ class KNNHarness:
         self._testing_targets: pd.Series = pd.Series()
         # Value of the best_k (to be validated later).
         self._best_k: int = 3
+        # Curr value of k (used for preprocessing).
+        self._curr_k: int = 3
         self._candidate_k_values: list[int] = [3]
         self._dataset: pd.DataFrame = pd.DataFrame()
         self._dataset_targets: pd.Series = pd.Series()
@@ -138,6 +140,18 @@ class KNNHarness:
         '''Setter for the best_k property.'''
 
         self._best_k = k
+    
+    @property
+    def curr_k(self) -> int:
+        '''Getter for the curr_k property.'''
+
+        return self._curr_k
+
+    @curr_k.setter
+    def curr_k(self, k: int) -> None:
+        '''Setter for the curr_k property.'''
+
+        self._curr_k = k
 
     @property
     def candidate_k_values(self) -> list[int]:
@@ -384,15 +398,36 @@ class KNNHarness:
         k -- the number of closest neighbors to use in the mean calculation.
         '''
 
-        # Compute euclidean distances using vectorized operations.
-        distances: np.ndarray = np.sqrt(
-            np.sum((dataset - example_to_predict)**2, axis=1))
-
-        # Get indices of the k smallest distances.
-        indices: np.ndarray = np.argpartition(distances, k)[:k]
-
+        indices: np.ndarray = self.get_k_nearest_neighbors(
+            example_to_predict,
+            dataset,
+            k
+        )
         # Return mean of corresponding target values.
         return float(target_column[indices].mean())
+
+    def get_k_nearest_neighbors(
+            self,
+            example_to_get_neighbors_of: np.ndarray,
+            dataset: np.ndarray,
+            k: int = 3
+    ) -> np.ndarray:
+        '''Returns the k nearest neighbors of an example.
+
+        Keyword arguments:
+        example_to_get_neighbors_of -- the example we are interested in.
+        dataset -- the example to get the nearest neighbors from.
+        k -- the number of nearest neighbors to fetch.
+        '''
+
+        # Compute euclidean distances using vectorized operations.
+        distances: np.ndarray = np.sqrt(
+            np.sum((dataset - example_to_get_neighbors_of)**2, axis=1))
+
+        # Get indices of the k smallest distances
+        indices: np.ndarray = np.argsort(distances, k)[:k]
+
+        return indices
 
     def knn_classifier(
             self,
@@ -410,12 +445,21 @@ class KNNHarness:
         k -- the number of closest neighbors to use in the mode calculation.
         '''
 
-        # Compute euclidean distances using vectorized operations.
-        distances: np.ndarray = np.sqrt(
-            np.sum((dataset - example_to_predict)**2, axis=1))
+        indices: np.ndarray = self.get_k_nearest_neighbors(
+            example_to_predict,
+            dataset,
+            k
+        )
 
-        # Get indices of the k smallest distances
-        indices: np.ndarray = np.argpartition(distances, k)[:k]
+        return self.get_most_common_class(target_column, indices)
+
+    def get_most_common_class(self, target_column, indices) -> float:
+        '''Returns the most common class in target_column among examples at indices.
+        
+        Keyword arguments:
+        target_column -- column containing the target values / class labels.
+        indices -- the indices of the examples we wish to get the mode class of.
+        '''
 
         values: np.ndarray
         counts: np.ndarray
@@ -547,6 +591,9 @@ class KNNHarness:
                 training_cols: pd.Index
                 scaler: StandardScaler
 
+                # Update curr_k.
+                self.curr_k = candidate_k
+
                 # Preprocess the training data and apply transformations to val data.
                 (
                     train_data_scaled,
@@ -599,6 +646,8 @@ class KNNHarness:
             training_cols: pd.Index
             training_targets: np.ndarray
             scaler: StandardScaler
+
+            self.curr_k = self.best_k
 
             # Preprocess split datasets.
             (
@@ -673,6 +722,8 @@ class KNNHarness:
                 val_data_scaled: np.ndarray
                 training_cols: pd.Index
                 scaler: StandardScaler
+
+                self.curr_k = candidate_k
 
                 # Preprocess the training data and apply transformations to val data.
                 (
