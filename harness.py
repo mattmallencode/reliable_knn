@@ -425,7 +425,7 @@ class KNNHarness:
             np.sum((dataset - example_to_get_neighbors_of)**2, axis=1))
 
         # Get indices of the k smallest distances
-        indices: np.ndarray = np.argsort(distances, k)[:k]
+        indices: np.ndarray = np.argsort(distances)[:k]
 
         return indices
 
@@ -659,7 +659,6 @@ class KNNHarness:
 
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
-
             # Get MAE of test data when neighbors are gotten from train+val.
             total_mae += self.get_mae_of_knn_regressor(
                 self.best_k, training_data_scaled,
@@ -785,10 +784,10 @@ class KNNHarness:
                 training_cols,
                 scaler
             ) = self._preprocess_dataset(self.training_data)
-
+            
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
-
+            
             # If classification, encode target col w/ ints = less expensive comparisons.
             if self.regressor_or_classifier == 'classifier':
                 label_encoder: LabelEncoder = LabelEncoder()
@@ -819,5 +818,5 @@ class KNNHarness:
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# test = KNNHarness('classifier', 'datasets/iris.data', 'class')
-# print(test.evaluate())
+test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+print(test.evaluate())
