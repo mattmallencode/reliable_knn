@@ -86,7 +86,7 @@ class BBNRHarness(KNNHarness):
                 ::-1]][:, 0]
             curr_example_index: int = indxs_by_desc_lset_size[0]
             removed_examples = np.zeros(dataset_np.shape[0], dtype=np.bool_)
-            
+
             # While we haven't reached examples without liabilities.
             while (liability_dict[curr_example_index]):
 
@@ -166,7 +166,6 @@ class BBNRHarness(KNNHarness):
 
             dataset_np = dataset_np[~removed_examples]
             training_targets_np = training_targets_np[~removed_examples]
-        
 
         return (dataset_np, training_targets_np, training_cols, scaler)
 
@@ -239,6 +238,7 @@ class BBNRHarness(KNNHarness):
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# test = BBNRHarness('classifier', 'datasets/iris.data', 'class')
-# test = BBNRHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-# print(test.evaluate())
+test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+print(test.evaluate())
+test = BBNRHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+print(test.evaluate())
