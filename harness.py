@@ -207,6 +207,14 @@ class KNNHarness:
         self.dataset = dataset.drop(columns=[self.target_column_name])
         self.dataset_targets = dataset[self.target_column_name]
 
+        # If it's a classification task, label encode the dataset targets.
+        if self.regressor_or_classifier == 'classifier':
+            label_encoder: LabelEncoder = LabelEncoder()
+            label_encoder.fit(self.dataset_targets)
+            self.dataset_targets = pd.Series(
+                label_encoder.transform(self.dataset_targets))
+
+
     def _get_candidate_k_values(self, num_examples: int) -> list[int]:
         '''Returns a list of 5 candidate values for k for KNN based on num_examples.
 
@@ -710,13 +718,6 @@ class KNNHarness:
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
 
-                # Encode with integers to avoid expensive string comparisons.
-                label_encoder: LabelEncoder = LabelEncoder()
-                label_encoder.fit(train_targets)
-                train_targets = pd.Series(
-                    label_encoder.transform(train_targets))
-                val_targets = pd.Series(label_encoder.transform(val_targets))
-
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
                 training_cols: pd.Index
@@ -773,7 +774,6 @@ class KNNHarness:
 
             training_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
-            training_targets: np.ndarray
             training_cols: pd.Index
             scaler: StandardScaler
 
@@ -788,15 +788,6 @@ class KNNHarness:
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
             
-            # If classification, encode target col w/ ints = less expensive comparisons.
-            if self.regressor_or_classifier == 'classifier':
-                label_encoder: LabelEncoder = LabelEncoder()
-                label_encoder.fit(self.training_targets)
-                training_targets = pd.Series(
-                    label_encoder.transform(self.training_targets))
-                self.testing_targets = pd.Series(
-                    label_encoder.transform(self.testing_targets))
-
             # Get accuracy of test data when neighbors are gotten from train+val.
             total_accuracy += self.get_accuracy_of_knn_classifier(
                 self.best_k, training_data_scaled,
@@ -818,5 +809,5 @@ class KNNHarness:
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-print(test.evaluate())
+# test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+# print(test.evaluate())
