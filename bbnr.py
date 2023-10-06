@@ -238,7 +238,5 @@ class BBNRHarness(KNNHarness):
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-print(test.evaluate())
-test = BBNRHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+test = BBNRHarness('classifier', 'datasets/iris.data', 'class')
 print(test.evaluate())
