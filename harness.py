@@ -44,6 +44,8 @@ class KNNHarness:
         self._testing_targets: pd.Series = pd.Series()
         # Value of the best_k (to be validated later).
         self._best_k: int = 3
+        # Curr value of k (used for preprocessing).
+        self._curr_k: int = 3
         self._candidate_k_values: list[int] = [3]
         self._dataset: pd.DataFrame = pd.DataFrame()
         self._dataset_targets: pd.Series = pd.Series()
@@ -140,6 +142,18 @@ class KNNHarness:
         self._best_k = k
 
     @property
+    def curr_k(self) -> int:
+        '''Getter for the curr_k property.'''
+
+        return self._curr_k
+
+    @curr_k.setter
+    def curr_k(self, k: int) -> None:
+        '''Setter for the curr_k property.'''
+
+        self._curr_k = k
+
+    @property
     def candidate_k_values(self) -> list[int]:
         '''Getter for the candidate_k_values property.'''
         return self._candidate_k_values
@@ -193,6 +207,13 @@ class KNNHarness:
         self.dataset = dataset.drop(columns=[self.target_column_name])
         self.dataset_targets = dataset[self.target_column_name]
 
+        # If it's a classification task, label encode the dataset targets.
+        if self.regressor_or_classifier == 'classifier':
+            label_encoder: LabelEncoder = LabelEncoder()
+            label_encoder.fit(self.dataset_targets)
+            self.dataset_targets = pd.Series(
+                label_encoder.transform(self.dataset_targets))
+
     def _get_candidate_k_values(self, num_examples: int) -> list[int]:
         '''Returns a list of 5 candidate values for k for KNN based on num_examples.
 
@@ -241,7 +262,7 @@ class KNNHarness:
         candidate_k_values = [max(1, k) for k in candidate_k_values]
 
         # Just return unique candidate values.
-        return list(set(candidate_k_values))
+        return sorted(list(set(candidate_k_values)))
 
     def _split_dataset(
         self,
@@ -384,15 +405,36 @@ class KNNHarness:
         k -- the number of closest neighbors to use in the mean calculation.
         '''
 
-        # Compute euclidean distances using vectorized operations.
-        distances: np.ndarray = np.sqrt(
-            np.sum((dataset - example_to_predict)**2, axis=1))
-
-        # Get indices of the k smallest distances.
-        indices: np.ndarray = np.argpartition(distances, k)[:k]
-
+        indices: np.ndarray = self.get_k_nearest_neighbors(
+            example_to_predict,
+            dataset,
+            k
+        )
         # Return mean of corresponding target values.
         return float(target_column[indices].mean())
+
+    def get_k_nearest_neighbors(
+            self,
+            example_to_get_neighbors_of: np.ndarray,
+            dataset: np.ndarray,
+            k: int = 3
+    ) -> np.ndarray:
+        '''Returns the k nearest neighbors of an example.
+
+        Keyword arguments:
+        example_to_get_neighbors_of -- the example we are interested in.
+        dataset -- the example to get the nearest neighbors from.
+        k -- the number of nearest neighbors to fetch.
+        '''
+
+        # Compute euclidean distances using vectorized operations.
+        distances: np.ndarray = np.sqrt(
+            np.sum((dataset - example_to_get_neighbors_of)**2, axis=1))
+
+        # Get indices of the k smallest distances
+        indices: np.ndarray = np.argsort(distances)[:k]
+
+        return indices
 
     def knn_classifier(
             self,
@@ -410,12 +452,21 @@ class KNNHarness:
         k -- the number of closest neighbors to use in the mode calculation.
         '''
 
-        # Compute euclidean distances using vectorized operations.
-        distances: np.ndarray = np.sqrt(
-            np.sum((dataset - example_to_predict)**2, axis=1))
+        indices: np.ndarray = self.get_k_nearest_neighbors(
+            example_to_predict,
+            dataset,
+            k
+        )
 
-        # Get indices of the k smallest distances
-        indices: np.ndarray = np.argpartition(distances, k)[:k]
+        return self.get_most_common_class(target_column, indices)
+
+    def get_most_common_class(self, target_column, indices) -> float:
+        '''Returns the most common class in target_column among examples at indices.
+
+        Keyword arguments:
+        target_column -- column containing the target values / class labels.
+        indices -- the indices of the examples we wish to get the mode class of.
+        '''
 
         values: np.ndarray
         counts: np.ndarray
@@ -503,16 +554,31 @@ class KNNHarness:
         # Return the accuracy.
         return accuracy
 
-    def _get_best_k_for_regressor(self) -> int:
-        '''Returns best k found for regression using 5-fold cross-validation.'''
+    def _get_best_k_for_regressor(
+            self,
+            candidates: list[int] | None = None,
+            forward: bool = False
+    ) -> int:
+        '''Returns best k found for regression using 5-fold cross-validation.
 
-        best_k: int
+        Keyword arguments:
+        candidates -- k values are passed if recursively expanding search space.
+        forward -- if True, recursively expanding search space with a positive step.
+        '''
+
         best_avg_mae: float = float('inf')
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
         candidate_k: int
+        candidate_k_values: list[int]
+
+        # If this is a recursive call, assign candidates accordingly.
+        if candidates:
+            candidate_k_values = candidates
+        else:
+            candidate_k_values = self.candidate_k_values
 
         # For each candidate k value
-        for candidate_k in self.candidate_k_values:
+        for candidate_k in candidate_k_values:
 
             total_mae: float = 0.0
             train_idx: np.ndarray
@@ -547,6 +613,9 @@ class KNNHarness:
                 training_cols: pd.Index
                 scaler: StandardScaler
 
+                # Update curr_k.
+                self.curr_k = candidate_k
+
                 # Preprocess the training data and apply transformations to val data.
                 (
                     train_data_scaled,
@@ -570,13 +639,21 @@ class KNNHarness:
             # If better than best, update best_avg_mae and best_k.
             if avg_mae < best_avg_mae:
                 best_avg_mae = avg_mae
-                best_k = candidate_k
+                self.best_k = candidate_k
 
         # Default value for best_k if left undefined.
-        if not best_k:
-            best_k = 3
+        if not self.best_k:
+            self.best_k = 3
 
-        return best_k
+        # If we reach one of the edges of candidate_k_values, expand search space.
+        # Only expand 'backward' if we weren't expanding 'forward'.
+        if (
+            (self.best_k == candidate_k_values[0] and not forward) or
+            self.best_k == candidate_k_values[-1]
+        ):
+            self._expand_k_search_space(candidate_k_values, forward)
+
+        return self.best_k
 
     def _evaluate_regressor(self) -> float:
         '''Returns error of KNN regressor on the test set.'''
@@ -600,6 +677,8 @@ class KNNHarness:
             training_targets: np.ndarray
             scaler: StandardScaler
 
+            self.curr_k = self.best_k
+
             # Preprocess split datasets.
             (
                 training_data_scaled,
@@ -610,7 +689,6 @@ class KNNHarness:
 
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
-
             # Get MAE of test data when neighbors are gotten from train+val.
             total_mae += self.get_mae_of_knn_regressor(
                 self.best_k, training_data_scaled,
@@ -621,16 +699,87 @@ class KNNHarness:
 
         return total_mae / 5
 
-    def _get_best_k_for_classifier(self) -> int:
-        '''Returns the best k found for classification using 5-fold cross-validation.'''
+    def _expand_k_search_space(
+            self,
+            candidate_k_values: list[int],
+            forward: bool = False
+    ) -> None:
+        '''
+        Recursively calls _get_best_k... while expanding candidate_k_values.
 
-        best_k: int
+        Keyword arguments:
+        candidate_k_values -- the initial search space for best k.
+        forward -- whether we are expanding forwards i.e. increasing k values.
+        '''
+
+        step: int
+
+        # Get a good step size based on magnitude of best_k.
+        if self.best_k >= 1000:
+            step = 1000
+        elif self.best_k >= 100:
+            step = 100
+        elif self.best_k >= 10:
+            step = 10
+        else:
+            step = 1
+
+        # If we are at the left edge, should be a negative step.
+        if self.best_k == candidate_k_values[0]:
+            step *= -1
+        else:
+            forward = True
+
+        new_candidates: list[int] = []
+        curr_new_candidate: int = self.best_k + step
+
+        # While we haven't exausted positive values and haven't more than 2 new k's.
+        while curr_new_candidate > 0 and len(new_candidates) < 2:
+            new_candidates.append(curr_new_candidate)
+            # Expand search space according to step.
+            curr_new_candidate += step
+
+        # Only take odd k's and sort (otherwise will be backwards w/ negative step).
+        new_candidates = sorted([k - 1 if k %
+                                 2 == 0 else k for k in new_candidates])
+
+        # If we only had negative k's we'll have an empty list, so return.
+        if not new_candidates:
+            return
+        
+        # Call _get_best_k... with new search space.
+        if self.regressor_or_classifier == 'classifier':
+            self.best_k = self._get_best_k_for_classifier(
+                new_candidates, forward)
+        else:
+            self.best_k = self._get_best_k_for_regressor(
+                new_candidates, forward)
+
+    def _get_best_k_for_classifier(
+            self,
+            candidates: list[int] | None = None,
+            forward: bool = False
+    ) -> int:
+        '''Returns the best k found for classification using 5-fold cross-validation.
+
+        Keyword arguments:
+        candidates -- k values are passed if recursively expanding search space.
+        forward -- if True, recursively expanding search space with a positive step.
+        '''
+
         best_avg_accuracy: float = float('-inf')
-
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+        candidate_k: int
+        candidate_k_values: list[int]
+
+        # If this is a recursive call, assign candidates accordingly.
+        if candidates:
+            candidate_k_values = candidates
+        else:
+            candidate_k_values = self.candidate_k_values
 
         # For each candidate k value
-        for candidate_k in self.candidate_k_values:
+        for candidate_k in candidate_k_values:
 
             total_accuracy: float = 0.0
             train_idx: np.ndarray
@@ -662,17 +811,12 @@ class KNNHarness:
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
 
-                # Encode with integers to avoid expensive string comparisons.
-                label_encoder: LabelEncoder = LabelEncoder()
-                label_encoder.fit(train_targets)
-                train_targets = pd.Series(
-                    label_encoder.transform(train_targets))
-                val_targets = pd.Series(label_encoder.transform(val_targets))
-
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
                 training_cols: pd.Index
                 scaler: StandardScaler
+
+                self.curr_k = candidate_k
 
                 # Preprocess the training data and apply transformations to val data.
                 (
@@ -697,13 +841,21 @@ class KNNHarness:
             # If better than best, update best_avg_accuracy and best_k.
             if avg_accuracy > best_avg_accuracy:
                 best_avg_accuracy = avg_accuracy
-                best_k = candidate_k
+                self.best_k = candidate_k
 
         # Default value for best_k if left undefined.
-        if not best_k:
-            best_k = 3
+        if not self.best_k:
+            self.best_k = 3
 
-        return best_k
+        # If we reach one of the edges of candidate_k_values, expand search space.
+        # Only expand 'backward' if we weren't expanding 'forward'.
+        if (
+            (self.best_k == candidate_k_values[0] and not forward) or
+            self.best_k == candidate_k_values[-1]
+        ):
+            self._expand_k_search_space(candidate_k_values, forward)
+
+        return self.best_k
 
     def _evaluate_classifier(self) -> float:
         '''Returns accuracy of KNN classifier on the test set.'''
@@ -723,7 +875,6 @@ class KNNHarness:
 
             training_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
-            training_targets: np.ndarray
             training_cols: pd.Index
             scaler: StandardScaler
 
@@ -737,15 +888,6 @@ class KNNHarness:
 
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
-
-            # If classification, encode target col w/ ints = less expensive comparisons.
-            if self.regressor_or_classifier == 'classifier':
-                label_encoder: LabelEncoder = LabelEncoder()
-                label_encoder.fit(self.training_targets)
-                training_targets = pd.Series(
-                    label_encoder.transform(self.training_targets))
-                self.testing_targets = pd.Series(
-                    label_encoder.transform(self.testing_targets))
 
             # Get accuracy of test data when neighbors are gotten from train+val.
             total_accuracy += self.get_accuracy_of_knn_classifier(
@@ -768,5 +910,5 @@ class KNNHarness:
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# test = KNNHarness('classifier', 'datasets/iris.data', 'class')
+# test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
 # print(test.evaluate())
