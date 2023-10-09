@@ -77,5 +77,5 @@ class RENNHarness(KNNHarness):
         return (dataset_np, training_targets_np, training_cols, scaler)
 
 
-# test = RENNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-# print(test.evaluate())
+test = RENNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
+print(test.evaluate())
