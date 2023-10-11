@@ -26,7 +26,7 @@ class RENNHarness(KNNHarness):
         '''
 
         super().__init__(regressor_or_classifier, dataset_file_path,
-                         target_column_name, test_size, missing_values)
+                         target_column_name, missing_values)
 
     def _preprocess_dataset(
         self,
