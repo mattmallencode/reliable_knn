@@ -12,7 +12,6 @@ class KNNHarness:
             regressor_or_classifier: str,
             dataset_file_path: str,
             target_column_name: str,
-            test_size: float = 0.2,
             missing_values: list[str] = ['?']
     ):
         '''Initialises a kNN Harness.
@@ -21,7 +20,6 @@ class KNNHarness:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
-        test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
         '''
 
@@ -37,7 +35,6 @@ class KNNHarness:
         self._regressor_or_classifier: str = regressor_or_classifier.lower()
         self._dataset_file_path: str = dataset_file_path
         self._target_column_name: str = target_column_name
-        self._test_size: float = test_size
         self._missing_values: list[str] = missing_values
         self._dev_data: pd.DataFrame = pd.DataFrame()
         self._testing_data: pd.DataFrame = pd.DataFrame()
@@ -69,12 +66,6 @@ class KNNHarness:
         '''Getter for the target_column_name property.'''
 
         return self._target_column_name
-
-    @property
-    def test_size(self) -> float:
-        '''Getter for the test_size property.'''
-
-        return self._test_size
 
     @property
     def missing_values(self) -> list[str]:
@@ -350,7 +341,7 @@ class KNNHarness:
         # Return the aligned dataset.
         return testing_dataset
 
-    def knn_regressor(
+    def _knn_regressor(
             self,
             example_to_predict: np.ndarray,
             dataset: np.ndarray,
@@ -366,7 +357,7 @@ class KNNHarness:
         k -- the number of closest neighbors to use in the mean calculation.
         '''
 
-        indices: np.ndarray = self.get_k_nearest_neighbors(
+        indices: np.ndarray = self._get_k_nearest_neighbors(
             example_to_predict,
             dataset,
             k
@@ -374,7 +365,7 @@ class KNNHarness:
         # Return mean of corresponding target values.
         return float(target_column[indices].mean())
 
-    def get_k_nearest_neighbors(
+    def _get_k_nearest_neighbors(
             self,
             example_to_get_neighbors_of: np.ndarray,
             dataset: np.ndarray,
@@ -397,7 +388,7 @@ class KNNHarness:
 
         return indices
 
-    def knn_classifier(
+    def _knn_classifier(
             self,
             example_to_predict: np.ndarray,
             dataset: np.ndarray,
@@ -413,15 +404,15 @@ class KNNHarness:
         k -- the number of closest neighbors to use in the mode calculation.
         '''
 
-        indices: np.ndarray = self.get_k_nearest_neighbors(
+        indices: np.ndarray = self._get_k_nearest_neighbors(
             example_to_predict,
             dataset,
             k
         )
 
-        return self.get_most_common_class(target_column, indices)
+        return self._get_most_common_class(target_column, indices)
 
-    def get_most_common_class(self, target_column, indices) -> float:
+    def _get_most_common_class(self, target_column, indices) -> float:
         '''Returns the most common class in target_column among examples at indices.
 
         Keyword arguments:
@@ -447,7 +438,7 @@ class KNNHarness:
         # Return most common class of corresponding target values.
         return most_frequent
 
-    def get_mae_of_knn_regressor(
+    def _get_mae_of_knn_regressor(
             self,
             k: int,
             training_dataset: np.ndarray,
@@ -469,7 +460,7 @@ class KNNHarness:
 
         # Predict the target value for each example in the testing dataset.
         for example in testing_dataset:
-            predicted_value = self.knn_regressor(
+            predicted_value = self._knn_regressor(
                 example, training_dataset, training_targets, k)
             predictions.append(predicted_value)
 
@@ -481,7 +472,7 @@ class KNNHarness:
 
         return mae
 
-    def get_accuracy_of_knn_classifier(
+    def _get_accuracy_of_knn_classifier(
             self,
             k: int,
             training_dataset: np.ndarray,
@@ -505,7 +496,7 @@ class KNNHarness:
         # For each example in the testing data.
         for example in testing_dataset:
             # Predict the class for this example using the kNN classifier.
-            predicted_class: float = self.knn_classifier(
+            predicted_class: float = self._knn_classifier(
                 example, training_dataset, training_targets, k)
             predictions.append(predicted_class)
 
@@ -588,7 +579,7 @@ class KNNHarness:
                 val_data_scaled, _, _, _ = self._preprocess_dataset(
                     val_data, training_cols=training_cols, scaler=scaler)
 
-                mae: float = self.get_mae_of_knn_regressor(
+                mae: float = self._get_mae_of_knn_regressor(
                     candidate_k, train_data_scaled,
                     val_data_scaled, train_targets_np, val_targets
                 )
@@ -656,15 +647,17 @@ class KNNHarness:
             dev_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
             training_cols: pd.Index
-            dev_targets: np.ndarray
             scaler: StandardScaler
+            dev_targets_np: np.ndarray
+
 
             self.curr_k = self.best_k
+
 
             # Preprocess split datasets.
             (
                 dev_data_scaled,
-                dev_targets,
+                dev_targets_np,
                 training_cols,
                 scaler
             ) = self._preprocess_dataset(self.dev_data)
@@ -673,10 +666,10 @@ class KNNHarness:
                 self.testing_data, training_cols, scaler)
             # Get MAE of test data when neighbors are gotten from train+val.
             
-            total_mae += self.get_mae_of_knn_regressor(
+            total_mae += self._get_mae_of_knn_regressor(
                 self.best_k, dev_data_scaled,
                 testing_data_scaled,
-                dev_targets,
+                dev_targets_np,
                 self.testing_targets
             )
 
@@ -812,7 +805,7 @@ class KNNHarness:
                 val_data_scaled, _, _, _ = self._preprocess_dataset(
                     val_data, training_cols=training_cols, scaler=scaler)
 
-                accuracy: float = self.get_accuracy_of_knn_classifier(
+                accuracy: float = self._get_accuracy_of_knn_classifier(
                     candidate_k, train_data_scaled,
                     val_data_scaled, train_targets_np, val_targets
                 )
@@ -895,7 +888,7 @@ class KNNHarness:
                 self.testing_data, training_cols, scaler)
             
             # Get accuracy of test data when neighbors are gotten from train+val.
-            total_accuracy += self.get_accuracy_of_knn_classifier(
+            total_accuracy += self._get_accuracy_of_knn_classifier(
                 self.best_k, dev_data_scaled,
                 testing_data_scaled,
                 dev_targets_np,
@@ -914,6 +907,7 @@ class KNNHarness:
             return self._evaluate_classifier()
 
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
-## test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# print(test.evaluate())
+test = KNNHarness('classifier', 'datasets/heart.data', 'num')
+print(test.evaluate())
+test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+print(test.evaluate())

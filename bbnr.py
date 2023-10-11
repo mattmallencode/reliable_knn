@@ -12,7 +12,6 @@ class BBNRHarness(KNNHarness):
             regressor_or_classifier: str,
             dataset_file_path: str,
             target_column_name: str,
-            test_size: float = 0.2,
             missing_values: list[str] = ['?']
     ):
         '''Initialises a kNN Harness that applies BBNR to training data.
@@ -21,12 +20,11 @@ class BBNRHarness(KNNHarness):
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
-        test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
         '''
 
         super().__init__(regressor_or_classifier, dataset_file_path,
-                         target_column_name, test_size, missing_values)
+                         target_column_name, missing_values)
 
     def _preprocess_dataset(
         self,
@@ -202,7 +200,7 @@ class BBNRHarness(KNNHarness):
             # Get the actual label and predicted label for this example.
             actual_label: float = training_targets[example_index]
 
-            neighbor_indices: np.ndarray = self.get_k_nearest_neighbors(
+            neighbor_indices: np.ndarray = self._get_k_nearest_neighbors(
                 example, training_set, self.curr_k+1)[1:]
 
             # Get the prediction for the example.
@@ -231,11 +229,11 @@ class BBNRHarness(KNNHarness):
 
     def _classify_on_same_dataset(self, example, dataset, dataset_targets) -> float:
         # Get closest neighbors (k+1 and [1:] to not include the example itself).
-        neighbor_indices: np.ndarray = self.get_k_nearest_neighbors(
+        neighbor_indices: np.ndarray = self._get_k_nearest_neighbors(
             example, dataset, self.curr_k+1)[1:]
 
         # Get the prediction for the example.
-        predicted_label: float = self.get_most_common_class(
+        predicted_label: float = self._get_most_common_class(
             dataset_targets, neighbor_indices)
 
         return predicted_label
