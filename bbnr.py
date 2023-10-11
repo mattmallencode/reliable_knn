@@ -80,7 +80,11 @@ class BBNRHarness(KNNHarness):
             # The size of the liability sets of each example with liabilities.
             lset_sizes: np.ndarray = np.array(
                 [(key, len(liability_dict[key])) for key in liability_dict.keys()])
-
+            
+            # If there aren't liabilities, return the data as is.
+            if len(liability_dict) == 0:
+                return (dataset_np, training_targets_np, training_cols, scaler)
+            
             # The indices of the examples (sorted by descending liability size).
             indxs_by_desc_lset_size: np.ndarray = lset_sizes[lset_sizes[:, 1].argsort()[
                 ::-1]][:, 0]
@@ -238,5 +242,6 @@ class BBNRHarness(KNNHarness):
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-test = BBNRHarness('classifier', 'datasets/iris.data', 'class')
+test = BBNRHarness('classifier', 'datasets/zoo.data', 'type')
+# test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
 print(test.evaluate())
