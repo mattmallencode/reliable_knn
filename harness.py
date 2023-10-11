@@ -5,7 +5,6 @@ from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler, LabelEncoder  # type: ignore
 from tqdm import tqdm
 
-
 class KNNHarness:
 
     def __init__(
@@ -25,6 +24,8 @@ class KNNHarness:
         test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
         '''
+
+        np.random.seed(42)
 
         # Raise Exception if the user passed incorrent regressor_or_classifier value.
         if regressor_or_classifier.lower() not in ['classifier', 'regressor']:
@@ -527,7 +528,7 @@ class KNNHarness:
         '''
 
         best_avg_mae: float = float('inf')
-        kfold: KFold = KFold(n_splits=5)
+        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
         candidate_k: int
         candidate_k_values: list[int]
 
@@ -627,7 +628,7 @@ class KNNHarness:
 
         # Nested k-fold cross validation.
         # tqdm provides progress bar.
-        for dev_idx, test_idx in tqdm(kfold.split(self.dataset)):
+        for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
 
             dev_data: pd.DataFrame
             test_data: pd.DataFrame
@@ -671,6 +672,7 @@ class KNNHarness:
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
             # Get MAE of test data when neighbors are gotten from train+val.
+            
             total_mae += self.get_mae_of_knn_regressor(
                 self.best_k, dev_data_scaled,
                 testing_data_scaled,
@@ -749,7 +751,7 @@ class KNNHarness:
         '''
 
         best_avg_accuracy: float = float('-inf')
-        kfold: KFold = KFold(n_splits=5)
+        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
         candidate_k: int
         candidate_k_values: list[int]
 
@@ -850,7 +852,7 @@ class KNNHarness:
         
         # Nested k-fold cross validation.
         # tqdm provides progress bar.
-        for dev_idx, test_idx in tqdm(kfold.split(self.dataset)):
+        for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
 
             dev_data: pd.DataFrame
             test_data: pd.DataFrame
@@ -911,7 +913,7 @@ class KNNHarness:
         else:
             return self._evaluate_classifier()
 
-
+# test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
+## test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
 # print(test.evaluate())
