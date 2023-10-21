@@ -69,7 +69,7 @@ class RENNHarness(KNNHarness):
         # If it's a training set, apply RENN to it and update dataset and targets.
         if is_training_set and self.regressor_or_classifier == 'classifier':
 
-            renn = RepeatedEditedNearestNeighbours()
+            renn = RepeatedEditedNearestNeighbours(n_neighbors=self.curr_k)
 
             dataset_np, training_targets_np = renn.fit_resample(
                 dataset_np, training_targets_np)
@@ -77,6 +77,6 @@ class RENNHarness(KNNHarness):
         return (dataset_np, training_targets_np, training_cols, scaler)
 
 
-# test = RENNHarness('classifier', 'datasets/zoo.data', 'type')
+test = RENNHarness('classifier', 'datasets/heart.data', 'num')
 # test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
-# print(test.evaluate())
+print(test.evaluate())
