@@ -530,107 +530,6 @@ class KNNHarness:
         # Return the accuracy.
         return accuracy
 
-    def _get_best_k_for_regressor(
-            self,
-            candidates: list[int] | None = None,
-            forward: bool = False
-    ) -> int:
-        '''Returns best k found for regression using 5-fold cross-validation.
-
-        Keyword arguments:
-        candidates -- k values are passed if recursively expanding search space.
-        forward -- if True, recursively expanding search space with a positive step.
-        '''
-
-        best_avg_mae: float = float('inf')
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
-        candidate_k: int
-        candidate_k_values: list[int]
-
-        # If this is a recursive call, assign candidates accordingly.
-        if candidates:
-            candidate_k_values = candidates
-        else:
-            candidate_k_values = self.candidate_k_values
-
-        # For each candidate k value
-        for candidate_k in candidate_k_values:
-
-            total_mae: float = 0.0
-            train_idx: np.ndarray
-            val_idx: np.ndarray
-            train_targets: pd.Series
-            val_targets: pd.Series
-            train_targets_np: np.ndarray
-
-            # For each fold, train the model with 4 folds and validate with remaining.
-            for train_idx, val_idx in kfold.split(self.dev_data):
-
-                train_data: pd.DataFrame
-                val_data: pd.DataFrame
-
-                # Split data
-                train_data, val_data = (
-                    self.dev_data.iloc[train_idx].copy(),
-                    self.dev_data.iloc[val_idx].copy()
-                )
-
-                train_data.reset_index(drop=True, inplace=True)
-                val_data.reset_index(drop=True, inplace=True)
-
-                train_targets, val_targets = self.dev_targets.iloc[
-                    train_idx].copy(), self.dev_targets.iloc[val_idx].copy()
-
-                train_targets.reset_index(drop=True, inplace=True)
-                val_targets.reset_index(drop=True, inplace=True)
-
-                train_data_scaled: np.ndarray
-                val_data_scaled: np.ndarray
-                training_cols: pd.Index
-                scaler: StandardScaler
-
-                # Update curr_k.
-                self.curr_k = candidate_k
-
-                # Preprocess the training data and apply transformations to val data.
-                (
-                    train_data_scaled,
-                    train_targets_np,
-                    training_cols,
-                    scaler
-                ) = self._preprocess_dataset(train_data, training_targets=train_targets)
-
-                val_data_scaled, _, _, _ = self._preprocess_dataset(
-                    val_data, training_cols=training_cols, scaler=scaler)
-
-                mae: float = self._get_mae_of_knn_regressor(
-                    candidate_k, train_data_scaled,
-                    val_data_scaled, train_targets_np, val_targets
-                )
-
-                total_mae += mae
-
-            avg_mae: float = total_mae / kfold.get_n_splits()
-
-            # If better than best, update best_avg_mae and best_k.
-            if avg_mae < best_avg_mae:
-                best_avg_mae = avg_mae
-                self.best_k = candidate_k
-
-        # Default value for best_k if left undefined.
-        if not self.best_k:
-            self.best_k = 3
-
-        # If we reach one of the edges of candidate_k_values, expand search space.
-        # Only expand 'backward' if we weren't expanding 'forward'.
-        if (
-            (self.best_k == candidate_k_values[0] and not forward) or
-            self.best_k == candidate_k_values[-1]
-        ):
-            self._expand_k_search_space(candidate_k_values)
-
-        return self.best_k
-
     def _evaluate_regressor(self) -> float:
         '''Returns error of KNN regressor on the test set.'''
 
@@ -666,7 +565,7 @@ class KNNHarness:
             self.dev_targets = dev_targets
             self.testing_targets = test_targets
 
-            self.best_k = self._get_best_k_for_classifier()
+            self.best_k = self._get_best_k()
 
             dev_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
@@ -733,16 +632,16 @@ class KNNHarness:
 
         return new_candidates
 
-    def _get_best_k_for_classifier(
+    def _get_best_k(
             self,
             candidates: list[int] | None = None,
-            best_avg_accuracy: float = float('-inf')
+            best_avg_score: float = float('-inf')
     ) -> int:
-        '''Returns the best k found for classification using 5-fold cross-validation.
+        '''Returns the best k found for classification / regression using 5-fold cross-validation.
 
         Keyword arguments:
         candidates -- k values are passed if recursively expanding search space.
-        forward -- if True, recursively expanding search space with a positive step.
+        best_avg_score -- the best average accuracy / MAE recorded so far.
         '''
 
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -758,7 +657,8 @@ class KNNHarness:
         # For each candidate k value
         for candidate_k in candidate_k_values:
 
-            total_accuracy: float = 0.0
+            # total_score is either total MAE or total accuracy (depending on task).
+            total_score: float = 0.0
             train_idx: np.ndarray
             val_idx: np.ndarray
             train_targets: pd.Series
@@ -806,20 +706,38 @@ class KNNHarness:
                 val_data_scaled, _, _, _ = self._preprocess_dataset(
                     val_data, training_cols=training_cols, scaler=scaler)
 
-                accuracy: float = self._get_accuracy_of_knn_classifier(
-                    candidate_k, train_data_scaled,
-                    val_data_scaled, train_targets_np, val_targets
-                )
+                score: float
 
-                total_accuracy += accuracy
+                if self.regressor_or_classifier == 'classifier':
+                    score = self._get_accuracy_of_knn_classifier(
+                        candidate_k, train_data_scaled,
+                        val_data_scaled, train_targets_np, val_targets
+                    )
+                else:
+                    score = self._get_mae_of_knn_regressor(
+                        candidate_k, train_data_scaled,
+                        val_data_scaled, train_targets_np, val_targets
+                    )
 
-            avg_accuracy: float = total_accuracy / kfold.get_n_splits()
+                total_score += score
 
-            # If better than best, update best_avg_accuracy and best_k.
-            if avg_accuracy > best_avg_accuracy:
-                best_avg_accuracy = avg_accuracy
-                self.best_k = candidate_k
+            avg_score: float = total_score / kfold.get_n_splits()
 
+            # If better than best, update best_score and best_k.
+            if self.regressor_or_classifier == 'classifier':
+
+                # If classification avg_score is better if higher.
+                if avg_score > best_avg_score:
+                    best_avg_score = avg_score
+                    self.best_k = candidate_k
+            
+            else:
+            
+                # If regression avg_score is better if lower.
+                if avg_score < best_avg_score:
+                    best_avg_score = avg_score
+                    self.best_k = candidate_k
+            
         self.tried_k.update(candidate_k_values)
 
         # Default value for best_k if left undefined.
@@ -835,19 +753,19 @@ class KNNHarness:
                 (candidate_k_values[best_k_index + 1] - self.best_k) * 0.25)
             if step <= 0:
                 step = 1
+            self.step_size_k = step
             new_candidates = [self.best_k + i*step for i in range(-2, 3)]
         else:
             new_candidates = self._expand_k_search_space(candidate_k_values)
 
-        new_candidates = [k for k in new_candidates if k ==
-                          self.best_k or k not in self.tried_k and k > 0]
+        new_candidates = list(set([k for k in new_candidates if k ==
+                                   self.best_k or k not in self.tried_k and k > 0]))
 
         if not new_candidates or new_candidates == [self.best_k]:
-            print(self.best_k)
             return self.best_k
 
-        self.best_k = self._get_best_k_for_classifier(
-            new_candidates, best_avg_accuracy)
+        self.best_k = self._get_best_k(
+            new_candidates, best_avg_score)
 
         return self.best_k
 
@@ -886,7 +804,7 @@ class KNNHarness:
             self.dev_targets = dev_targets
             self.testing_targets = test_targets
 
-            self.best_k = self._get_best_k_for_classifier()
+            self.best_k = self._get_best_k()
 
             dev_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
@@ -912,7 +830,6 @@ class KNNHarness:
                 dev_targets_np,
                 self.testing_targets
             )
-
         # Did 5 repeated holdouts, return average accuracy.
         return total_accuracy / 5
 
@@ -926,7 +843,7 @@ class KNNHarness:
 
 
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
-test = KNNHarness('classifier', 'datasets/heart.data', 'num')
-print(test.evaluate())
-# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+# test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
+test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+print(test.evaluate())
