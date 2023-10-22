@@ -240,6 +240,6 @@ class BBNRHarness(KNNHarness):
 
 
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-test = BBNRHarness('classifier', 'datasets/zoo.data', 'type')
+test = BBNRHarness('classifier', 'datasets/heart.data', 'num')
 # test = KNNHarness('classifier', 'datasets/custom_cleveland.data', 'num')
 print(test.evaluate())

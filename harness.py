@@ -635,7 +635,7 @@ class KNNHarness:
     def _get_best_k(
             self,
             candidates: list[int] | None = None,
-            best_avg_score: float = float('-inf')
+            best_avg_score: float | None = None
     ) -> int:
         '''Returns the best k found for classification / regression using 5-fold cross-validation.
 
@@ -643,6 +643,12 @@ class KNNHarness:
         candidates -- k values are passed if recursively expanding search space.
         best_avg_score -- the best average accuracy / MAE recorded so far.
         '''
+
+        if best_avg_score is None:
+            if self.regressor_or_classifier == 'classifier':
+                best_avg_score = float('-inf')
+            else:
+                best_avg_score = float('inf')
 
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
         candidate_k: int
@@ -748,18 +754,19 @@ class KNNHarness:
             self.best_k != candidate_k_values[0] and
             self.best_k != candidate_k_values[-1]
         ):
+        
             best_k_index = candidate_k_values.index(self.best_k)
             step = int(
                 (candidate_k_values[best_k_index + 1] - self.best_k) * 0.25)
-            if step <= 0:
-                step = 1
+            if step <= 1:
+                step = 2
             self.step_size_k = step
             new_candidates = [self.best_k + i*step for i in range(-2, 3)]
         else:
             new_candidates = self._expand_k_search_space(candidate_k_values)
 
-        new_candidates = list(set([k for k in new_candidates if k ==
-                                   self.best_k or k not in self.tried_k and k > 0]))
+        new_candidates = sorted(list(set([k for k in new_candidates if k ==
+                                   self.best_k or k not in self.tried_k and k > 0])))
 
         if not new_candidates or new_candidates == [self.best_k]:
             return self.best_k
@@ -845,5 +852,5 @@ class KNNHarness:
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
 # test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
-test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-print(test.evaluate())
+# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+# print(test.evaluate())
