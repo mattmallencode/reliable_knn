@@ -29,17 +29,17 @@ class BBNRHarness(KNNHarness):
     def _preprocess_dataset(
         self,
         dataset: pd.DataFrame,
+        training_targets: pd.Series,
         training_cols: pd.Index | None = None,
         scaler: StandardScaler | None = None,
-        training_targets: pd.Series = pd.Series(),
     ) -> tuple[np.ndarray, np.ndarray, pd.Index, StandardScaler]:
         '''Preprocesses data, returns cols & scaler used. Also applies BBNR if training.
 
         Keyword arguments:
         dataset -- the dataset we wish to preprocess.
+        training_targets -- the targets associated with the training dataset.
         training_cols -- defaults to None; used to account for missing cols post split.
         scaler -- the StandardScaler used to scale the data, init if None is passed.
-        training_targets -- target series for training data (empty if val or test).
         '''
 
         # Check if this is a training set that is being preprocessed.
@@ -59,9 +59,9 @@ class BBNRHarness(KNNHarness):
             scaler
         ) = super()._preprocess_dataset(
             dataset,
+            training_targets,
             training_cols,
             scaler,
-            training_targets=training_targets
         )
 
         # If it's a training set, apply BBNR to it and update dataset and targets.
