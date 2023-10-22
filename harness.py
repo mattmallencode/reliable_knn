@@ -722,7 +722,7 @@ class KNNHarness:
 
 
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
-test = KNNHarness('classifier', 'datasets/heart.data', 'num')
+# test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-print(test.evaluate())
+# print(test.evaluate())
