@@ -530,72 +530,6 @@ class KNNHarness:
         # Return the accuracy.
         return accuracy
 
-    def _evaluate_regressor(self) -> float:
-        '''Returns error of KNN regressor on the test set.'''
-
-        total_mae: float = 0
-
-        dev_idx: np.ndarray
-        test_idx: np.ndarray
-
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
-
-        # Nested k-fold cross validation.
-        # tqdm provides progress bar.
-        for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
-
-            dev_data: pd.DataFrame
-            test_data: pd.DataFrame
-            dev_targets: pd.Series
-            test_targets: pd.Series
-
-            # Split data
-            dev_data, test_data = (
-                self.dataset.iloc[dev_idx].copy(),
-                self.dataset.iloc[test_idx].copy()
-            )
-
-            dev_targets, test_targets = (
-                self.dataset_targets.iloc[dev_idx].copy(),
-                self.dataset_targets.iloc[test_idx].copy()
-            )
-
-            self.dev_data = dev_data
-            self.testing_data = test_data
-            self.dev_targets = dev_targets
-            self.testing_targets = test_targets
-
-            self.best_k = self._get_best_k()
-
-            dev_data_scaled: np.ndarray
-            testing_data_scaled: np.ndarray
-            training_cols: pd.Index
-            scaler: StandardScaler
-            dev_targets_np: np.ndarray
-
-            self.curr_k = self.best_k
-
-            # Preprocess split datasets.
-            (
-                dev_data_scaled,
-                dev_targets_np,
-                training_cols,
-                scaler
-            ) = self._preprocess_dataset(self.dev_data)
-
-            testing_data_scaled, _, _, _ = self._preprocess_dataset(
-                self.testing_data, training_cols, scaler)
-            # Get MAE of test data when neighbors are gotten from train+val.
-
-            total_mae += self._get_mae_of_knn_regressor(
-                self.best_k, dev_data_scaled,
-                testing_data_scaled,
-                dev_targets_np,
-                self.testing_targets
-            )
-
-        return total_mae / 5
-
     def _expand_k_search_space(
             self,
             candidate_k_values: list[int],
@@ -776,10 +710,11 @@ class KNNHarness:
 
         return self.best_k
 
-    def _evaluate_classifier(self) -> float:
-        '''Returns accuracy of KNN classifier on the test set.'''
+    def evaluate(self) -> float:
+        '''Returns error or accuracy rate (depending on task) of kNN on the dataset.'''
 
-        total_accuracy: float = 0
+        # Total MAE / accuracy (depending on task).
+        total_score: float = 0
 
         dev_idx: np.ndarray
         test_idx: np.ndarray
@@ -819,6 +754,8 @@ class KNNHarness:
             scaler: StandardScaler
             dev_targets_np: np.ndarray
 
+            self.curr_k = self.best_k
+
             # Preprocess split datasets.
             (
                 dev_data_scaled,
@@ -829,28 +766,29 @@ class KNNHarness:
 
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
                 self.testing_data, training_cols, scaler)
+            
 
-            # Get accuracy of test data when neighbors are gotten from train+val.
-            total_accuracy += self._get_accuracy_of_knn_classifier(
-                self.best_k, dev_data_scaled,
-                testing_data_scaled,
-                dev_targets_np,
-                self.testing_targets
-            )
-        # Did 5 repeated holdouts, return average accuracy.
-        return total_accuracy / 5
+            # Get MAE/accuracy of test data when neighbors are gotten from train+val.
 
-    def evaluate(self) -> float:
-        '''Returns error or accuracy rate (depending on task) of kNN on the dataset.'''
+            if self.regressor_or_classifier == 'regressor':
+                total_score += self._get_mae_of_knn_regressor(
+                    self.best_k, dev_data_scaled,
+                    testing_data_scaled,
+                    dev_targets_np,
+                    self.testing_targets
+                )
+            else:
+                total_score += self._get_accuracy_of_knn_classifier(
+                    self.best_k, dev_data_scaled,
+                    testing_data_scaled,
+                    dev_targets_np,
+                    self.testing_targets
+                )
 
-        if self.regressor_or_classifier == 'regressor':
-            return self._evaluate_regressor()
-        else:
-            return self._evaluate_classifier()
-
+        return total_score / 5
 
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
 # test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
-# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# print(test.evaluate())
+test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+print(test.evaluate())
