@@ -457,39 +457,73 @@ class KNNHarness:
     def _expand_k_search_space(
             self,
             candidate_k_values: list[int],
-            curr_best_k: int
+            curr_best_k: int,
+            tried_k: set[int]
     ) -> list[int]:
         '''
-        Returns a new list of candidate k_values.
+        Returns a new list of candidate k_values by expanding the grid search space.
 
         Keyword arguments:
         candidate_k_values -- the initial search space for best k.
         curr_best_k -- the current best value for k found.
+        tried_k -- the k values we have tried so far.
         '''
+
+        # The list of new candidates.
+        new_candidates: list[int] = []
 
         step: int
 
-        # Get the step size from the class.
-        step = self.step_size_k
+        # If this isn't an edge of a list of candidates.
+        if (
+            curr_best_k != candidate_k_values[0] and
+            curr_best_k != candidate_k_values[-1]
+        ):
 
-        # If we are at the left edge, should be a negative step.
-        if curr_best_k == candidate_k_values[0]:
-            step *= - 1
+            # Reduce step size by 75%.
+            step = self.step_size_k * 0.25
 
-        new_candidates: list[int] = []
-        curr_new_candidate: int = curr_best_k + step
+            # If we've gone too small, make the step size 2.
+            if step <= 1:
+                step = 2
 
-        # While we haven't exausted positive values and haven't more than 2 new k's.
-        while curr_new_candidate > 0 and len(new_candidates) < 4:
-            new_candidates.append(curr_new_candidate)
+            self.step_size_k = step
+
+            # Take two steps back and two steps forward.
+            new_candidates = [curr_best_k + i*step for i in range(-2, 3)]
+
+        # If this is an edge case i.e. start of prev list or end of prev list.
+        else:
+
+            # Get the step size from the class.
+            step = self.step_size_k
+
+            # If we are at the left edge, should be a negative step.
+            if curr_best_k == candidate_k_values[0]:
+                step *= - 1
+
             # Expand search space according to step.
-            curr_new_candidate += step
+            curr_new_candidate: int = curr_best_k + step
 
-        new_candidates.append(curr_best_k)
+            # While we haven't exausted positive values and haven't more than 4 new k's.
+            while curr_new_candidate > 0 and len(new_candidates) < 4:
 
-        # Only take odd k's and sort (otherwise will be backwards w/ negative step).
-        new_candidates = sorted([k - 1 if k %
-                                 2 == 0 else k for k in new_candidates])
+                # Add the new candidate.
+                new_candidates.append(curr_new_candidate)
+
+                # Expand search space according to step.
+                curr_new_candidate += step
+
+            # Add the curr_best_k back to the list of candidates.
+            new_candidates.append(curr_best_k)
+
+        # Only take odd k's.
+        new_candidates = list(set([k - 1 if k %
+                                   2 == 0 else k for k in new_candidates]))
+
+        # Only take positive ks that we haven't tried before (or that are the curr_best).
+        new_candidates = sorted(list(set([k for k in new_candidates if k ==
+                                          curr_best_k or k not in tried_k and k > 0])))
 
         return new_candidates
 
@@ -500,7 +534,7 @@ class KNNHarness:
             candidate_k_values: list[int],
             best_avg_score: float | None = None,
             curr_best_k: int = 3,
-            tried_k: set = set()
+            tried_k: set[int] = set()
 
     ) -> int:
         '''Returns the best k found for classification / regression using 5-fold cross-validation.
@@ -514,9 +548,12 @@ class KNNHarness:
         tried_k -- the k values we have tried so far.
         '''
 
+        # If this is the first call on the function.
         if best_avg_score is None:
+            # If classifier set the init best_avg_score to negative infinity.
             if self.regressor_or_classifier == 'classifier':
                 best_avg_score = float('-inf')
+            # If regressor set the init best_avg_score to positive infinity.
             else:
                 best_avg_score = float('inf')
 
@@ -528,6 +565,7 @@ class KNNHarness:
 
             # total_score is either total MAE or total accuracy (depending on task).
             total_score: float = 0.0
+
             train_idx: np.ndarray
             val_idx: np.ndarray
             train_targets: pd.Series
@@ -577,19 +615,24 @@ class KNNHarness:
 
                 score: float
 
+                # Get accuracy for this fold if its a classifier.
                 if self.regressor_or_classifier == 'classifier':
                     score = self._get_accuracy_of_knn_classifier(
                         candidate_k, train_data_scaled,
                         val_data_scaled, train_targets_np, val_targets
                     )
+
+                # Get MAE for this fold if its a regressor.
                 else:
                     score = self._get_mae_of_knn_regressor(
                         candidate_k, train_data_scaled,
                         val_data_scaled, train_targets_np, val_targets
                     )
 
+                # Add the score for this fold to the total_score.
                 total_score += score
 
+            # Get the avg_score by dividing by the number of folds.
             avg_score: float = total_score / kfold.get_n_splits()
 
             # If better than best, update best_score and best_k.
@@ -607,27 +650,17 @@ class KNNHarness:
                     best_avg_score = avg_score
                     curr_best_k = candidate_k
 
+        # Update tried_k with the candidate_k_values we just tried.
         tried_k.update(candidate_k_values)
 
-        if (
-            curr_best_k != candidate_k_values[0] and
-            curr_best_k != candidate_k_values[-1]
-        ):
+        new_candidates: list[int]
 
-            best_k_index = candidate_k_values.index(curr_best_k)
-            step = int(
-                (candidate_k_values[best_k_index + 1] - curr_best_k) * 0.25)
-            if step <= 1:
-                step = 2
-            self.step_size_k = step
-            new_candidates = [curr_best_k + i*step for i in range(-2, 3)]
-        else:
-            new_candidates = self._expand_k_search_space(
-                candidate_k_values, curr_best_k)
+        # Get a new list of candidate k values.
+        new_candidates = self._expand_k_search_space(
+            candidate_k_values, curr_best_k, tried_k)
 
-        new_candidates = sorted(list(set([k for k in new_candidates if k ==
-                                          curr_best_k or k not in tried_k and k > 0])))
-
+        
+        # If an empty list or the new_candidates just includes the curr_best_k iwe've finished the grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
             return curr_best_k
 
@@ -724,7 +757,7 @@ class KNNHarness:
 
 
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
-test = KNNHarness('classifier', 'datasets/heart.data', 'num')
+# test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-print(test.evaluate())
+# print(test.evaluate())
