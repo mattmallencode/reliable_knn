@@ -24,12 +24,13 @@ class KNNHarness:
         missing_values -- strings denoting missing values in the dataset.
         '''
 
+        # Set random seed to make the outcomes of experiments deterministic.
         np.random.seed(42)
 
-        # Raise Exception if the user passed incorrent regressor_or_classifier value.
+        # Raise Exception if user passed invalid regressor_or_classifier val.
         if regressor_or_classifier.lower() not in ['classifier', 'regressor']:
             raise ValueError(
-                'regressor_or_classifier must be set to "regressor" or "classifier" ' +
+                'regressor_or_classifier must be "regressor" | "classifier" ' +
                 f'not "{regressor_or_classifier}"'
             )
 
@@ -37,19 +38,15 @@ class KNNHarness:
         self._dataset_file_path: str = dataset_file_path
         self._target_column_name: str = target_column_name
         self._missing_values: list[str] = missing_values
-        self._dev_data: pd.DataFrame = pd.DataFrame()
-        self._testing_data: pd.DataFrame = pd.DataFrame()
-        self._dev_targets: pd.Series = pd.Series()
-        self._testing_targets: pd.Series = pd.Series()
-        # Value of the best_k (to be validated later).
-        self._best_k: int = 3
+        # The curr step size used for the grid search of k (calculated later).
         self._step_size_k: int = 10
-        self._tried_k: set[int] = set()
-        # Curr value of k (used for preprocessing).
+        # The current (not best) value for k (important for editing algos).
         self._curr_k: int = 3
-        self._candidate_k_values: list[int] = [3]
+        # Dataset as a Dataframe.
         self._dataset: pd.DataFrame = pd.DataFrame()
+        # Target values as a Series.
         self._dataset_targets: pd.Series = pd.Series()
+        # Populate the Dataframe and Series; label encode the target column.
         self._load_dataset()
 
     @property
@@ -77,66 +74,6 @@ class KNNHarness:
         return self._missing_values
 
     @property
-    def dev_data(self) -> pd.DataFrame:
-        '''Getter for the dev_data property.'''
-
-        return self._dev_data
-
-    @dev_data.setter
-    def dev_data(self, data: pd.DataFrame) -> None:
-        '''Setter for the dev_data property.'''
-
-        self._dev_data = data
-
-    @property
-    def testing_data(self) -> pd.DataFrame:
-        '''Getter for the testing_data property.'''
-
-        return self._testing_data
-
-    @testing_data.setter
-    def testing_data(self, data: pd.DataFrame) -> None:
-        '''Setter for the testing_data property.'''
-
-        self._testing_data = data
-
-    @property
-    def dev_targets(self) -> pd.Series:
-        '''Getter for the dev_targets property.'''
-
-        return self._dev_targets
-
-    @dev_targets.setter
-    def dev_targets(self, targets: pd.Series) -> None:
-        '''Setter for the dev_targets property.'''
-
-        self._dev_targets = targets
-
-    @property
-    def testing_targets(self) -> pd.Series:
-        '''Getter for the testing targets property.'''
-
-        return self._testing_targets
-
-    @testing_targets.setter
-    def testing_targets(self, targets: pd.Series) -> None:
-        '''Setter for the testing_targets property.'''
-
-        self._testing_targets = targets
-
-    @property
-    def best_k(self) -> int:
-        '''Getter for the best_k property.'''
-
-        return self._best_k
-
-    @best_k.setter
-    def best_k(self, k: int) -> None:
-        '''Setter for the best_k property.'''
-
-        self._best_k = k
-
-    @property
     def step_size_k(self) -> int:
         '''Getter for the step_size_k property.'''
 
@@ -159,28 +96,6 @@ class KNNHarness:
         '''Setter for the curr_k property.'''
 
         self._curr_k = k
-
-    @property
-    def candidate_k_values(self) -> list[int]:
-        '''Getter for the candidate_k_values property.'''
-        return self._candidate_k_values
-
-    @candidate_k_values.setter
-    def candidate_k_values(self, candidates: list[int]) -> None:
-        '''Setter for the candidate_k_values property.'''
-
-        self._candidate_k_values = candidates
-
-    @property
-    def tried_k(self) -> set[int]:
-        '''Getter for the tried_k property.'''
-        return self._tried_k
-
-    @tried_k.setter
-    def tried_k(self, values: set[int]) -> None:
-        '''Setter for the tried_k property'''
-
-        self._tried_k = values
 
     @property
     def dataset(self) -> pd.DataFrame:
@@ -207,14 +122,10 @@ class KNNHarness:
         self._dataset_targets = targets
 
     def _load_dataset(self) -> None:
-        '''Loads dataset into a DataFrame and extracts target Series.'''
+        '''Loads dataset as DF; extracts target Series; encodes targets.'''
 
         # First the load the dataset.
         dataset: pd.DataFrame = pd.read_csv(self.dataset_file_path)
-
-        # Get a range of candidate k values to validate.
-        self.candidate_k_values: list[int] = self._get_candidate_k_values(
-            len(dataset))
 
         # Replace specified missing values with NaN.
         dataset.replace(self.missing_values, np.nan, inplace=True)
@@ -222,7 +133,9 @@ class KNNHarness:
         # Drop rows containing NaN.
         dataset.dropna(inplace=True)
 
+        # Exclude the target column from the dataset.
         self.dataset = dataset.drop(columns=[self.target_column_name])
+        # Put the excluded target column into a Series.
         self.dataset_targets = dataset[self.target_column_name]
 
         # If it's a classification task, label encode the dataset targets.
@@ -232,14 +145,14 @@ class KNNHarness:
             self.dataset_targets = pd.Series(
                 label_encoder.transform(self.dataset_targets))
 
-    def _get_candidate_k_values(self, num_examples: int) -> list[int]:
-        '''Returns a list of 5 candidate values for k for KNN based on num_examples.
+    def _get_initial_candidate_k_values(self, num_examples: int) -> list[int]:
+        '''Returns init list of 5 k candidates for KNN based on num_examples.
 
         Keyword arguments:
-        num_examples -- the number of examples in the dataset the KNN will be run on.
+        num_examples -- the num examples in the dataset the KNN will be run on.
         '''
 
-        # Get a good initial value for k by getting the square root of the num_examples.
+        # Get a good initial value for k by getting the sqrt of num_examples.
         initial_k: int = int(np.sqrt(num_examples))
 
         # Ensure the initial k value is odd.
@@ -277,34 +190,30 @@ class KNNHarness:
         # Ensure k values are greater than zero.
         candidate_k_values = [max(1, k) for k in candidate_k_values]
 
-        # Just return unique candidate values.
+        # Just return unique candidate values, sorted in ascending order.
         return sorted(list(set(candidate_k_values)))
 
     def _preprocess_dataset(
         self,
         dataset: pd.DataFrame,
+        training_targets: pd.Series,
         training_cols: pd.Index | None = None,
         scaler: StandardScaler | None = None,
-        training_targets: pd.Series = pd.Series(),
     ) -> tuple[np.ndarray, np.ndarray, pd.Index, StandardScaler]:
-        '''Preprocesses data and returns the cols and scaler used for the dataset.
+        '''Preprocesses data and returns cols and scaler used for the dataset.
 
         Keyword arguments:
         dataset -- the dataset we wish to preprocess.
-        training_cols -- defaults to None; used to account for missing cols post split.
-        scaler -- the StandardScaler used to scale the data, init if None is passed.
-        training_targets -- target series for training data (empty if val or test).
+        training_targets -- the targets associated with the training dataset.
+        training_cols -- default None; accounts for missing cols post split.
+        scaler -- the StandardScaler to use, init if None is passed.
         '''
-
-        # If empty, just set training targets to the class attribute.
-        if len(training_targets) == 0:
-            training_targets = self.dev_targets
 
         # Columns to one-hot encode.
         cols_to_encode: list[str] = []
 
         # If marked with '(cat)' it is a categorical column.
-        # Else, try convert columns to numeric. If unsuccessful, it's a categorical col.
+        # Else, try convert columns to numeric. If can't, it's a cat col.
         for col in dataset.columns:
             if '(cat)' in col.lower():
                 cols_to_encode.append(col)
@@ -320,28 +229,40 @@ class KNNHarness:
         # Add missing cols if this is the test or validation dataset.
         if training_cols is not None:
             dataset = self._align_test_cols(training_cols, dataset)
+
+        # If this is a dev or training set, set the training_cols.
         else:
             training_cols = dataset.columns
 
         dataset_scaled: np.ndarray
 
+        # If we didn't pass a scaler this must be a dev or training set.
         if scaler is None:
+            # Initialise a scaler.
             scaler = StandardScaler()
             dataset_scaled = scaler.fit_transform(dataset)
+
+        # This is either test or val so we should use existing scaler.
         else:
             dataset_scaled = scaler.transform(dataset)
 
-        return (dataset_scaled, training_targets.to_numpy(), training_cols, scaler)
+        # Return scaled data, train targets as np array, train cols & scaler.
+        return (
+            dataset_scaled,
+            training_targets.to_numpy(),
+            training_cols,
+            scaler
+        )
 
     def _align_test_cols(
         self,
         training_cols: pd.Index,
         testing_dataset: pd.DataFrame
     ) -> pd.DataFrame:
-        '''Aligns testing_dataset (or val) cols with those of training_dataset.
+        '''Aligns testing_dataset (or val) cols with those of dev or train set.
 
         Keyword arguments:
-        training_dataset -- the columns found in the training dataset.
+        training_cols -- the columns found in the training dataset.
         testing_dataset -- the dataset we wish to align to training_dataset.
         '''
 
@@ -353,6 +274,7 @@ class KNNHarness:
         missing_data: pd.DataFrame = pd.DataFrame(
             {col: np.zeros(len(testing_dataset)) for col in missing_cols})
 
+        # Reset indices of both DataFrames.
         testing_dataset.reset_index(inplace=True)
         missing_data.reset_index(inplace=True)
 
@@ -377,10 +299,11 @@ class KNNHarness:
         Keyword arguments:
         example_to_predict -- the example we are running the regression on.
         dataset -- the dataset to get the nearest neighbors from.
-        target_column -- column w/ target values of the examples in the dataset.
+        target_column -- column w/ target vals of the examples in the dataset.
         k -- the number of closest neighbors to use in the mean calculation.
         '''
 
+        # Get the indices of the nearest neighbors.
         indices: np.ndarray = self._get_k_nearest_neighbors(
             example_to_predict,
             dataset,
@@ -395,7 +318,7 @@ class KNNHarness:
             dataset: np.ndarray,
             k: int = 3
     ) -> np.ndarray:
-        '''Returns the k nearest neighbors of an example.
+        '''Returns k nearest neighbors of an example (as an array of indices).
 
         Keyword arguments:
         example_to_get_neighbors_of -- the example we are interested in.
@@ -410,6 +333,7 @@ class KNNHarness:
         # Get indices of the k smallest distances
         indices: np.ndarray = np.argsort(distances)[:k]
 
+        # Return the indices of the closest neighbors.
         return indices
 
     def _knn_classifier(
@@ -424,39 +348,42 @@ class KNNHarness:
         Keyword arguments:
         example_to_predict -- the example we are running the classification on.
         dataset -- the dataset to get the nearest neighbors from.
-        target_column -- column w/ the class labels of the examples in the dataset.
+        target_column -- col w/ class labels of the examples in the dataset.
         k -- the number of closest neighbors to use in the mode calculation.
         '''
 
+        # Get the indices of the nearest neighbors.
         indices: np.ndarray = self._get_k_nearest_neighbors(
             example_to_predict,
             dataset,
             k
         )
 
+        # Return the most common class of the nearest neighbors.
         return self._get_most_common_class(target_column, indices)
 
     def _get_most_common_class(self, target_column, indices) -> float:
-        '''Returns the most common class in target_column among examples at indices.
+        '''Returns most common class in target_column among examples @ indices.
 
         Keyword arguments:
         target_column -- column containing the target values / class labels.
-        indices -- the indices of the examples we wish to get the mode class of.
+        indices -- indices of the examples we wish to get the mode class of.
         '''
 
         values: np.ndarray
         counts: np.ndarray
 
-        # Find the mode of the target values
+        # Find the mode of the target values.
         values, counts = np.unique(target_column[indices], return_counts=True)
 
-        # Get indices of max counts.
+        # Get indices of examples with the mode class.
         max_indices: np.ndarray = np.argwhere(
             counts == np.amax(counts)).flatten()
 
         # Pick one at random (handles cases where there's a tie).
         random_index = np.random.choice(max_indices)
 
+        # Give the final answer of the vote.
         most_frequent: float = values[random_index]
 
         # Return most common class of corresponding target values.
@@ -480,6 +407,7 @@ class KNNHarness:
         testing_targets -- the target values of testing_dataset.
         '''
 
+        # The list of our predicted values.
         predictions: list[float] = []
 
         # Predict the target value for each example in the testing dataset.
@@ -494,6 +422,7 @@ class KNNHarness:
         # Calculate mean absolute error between predictions and true values.
         mae = mean_absolute_error(testing_targets, predictions_series)
 
+        # Return the MAE.
         return mae
 
     def _get_accuracy_of_knn_classifier(
@@ -514,7 +443,7 @@ class KNNHarness:
         testing_targets -- the target values of testing_dataset.
         '''
 
-        # Create a list to store predictions for each example in the testing data.
+        # Create list to store predictions for each example in testing data.
         predictions: list[float] = []
 
         # For each example in the testing data.
@@ -530,165 +459,148 @@ class KNNHarness:
         # Return the accuracy.
         return accuracy
 
-    def _evaluate_regressor(self) -> float:
-        '''Returns error of KNN regressor on the test set.'''
-
-        total_mae: float = 0
-
-        dev_idx: np.ndarray
-        test_idx: np.ndarray
-
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
-
-        # Nested k-fold cross validation.
-        # tqdm provides progress bar.
-        for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
-
-            dev_data: pd.DataFrame
-            test_data: pd.DataFrame
-            dev_targets: pd.Series
-            test_targets: pd.Series
-
-            # Split data
-            dev_data, test_data = (
-                self.dataset.iloc[dev_idx].copy(),
-                self.dataset.iloc[test_idx].copy()
-            )
-
-            dev_targets, test_targets = (
-                self.dataset_targets.iloc[dev_idx].copy(),
-                self.dataset_targets.iloc[test_idx].copy()
-            )
-
-            self.dev_data = dev_data
-            self.testing_data = test_data
-            self.dev_targets = dev_targets
-            self.testing_targets = test_targets
-
-            self.best_k = self._get_best_k()
-
-            dev_data_scaled: np.ndarray
-            testing_data_scaled: np.ndarray
-            training_cols: pd.Index
-            scaler: StandardScaler
-            dev_targets_np: np.ndarray
-
-            self.curr_k = self.best_k
-
-            # Preprocess split datasets.
-            (
-                dev_data_scaled,
-                dev_targets_np,
-                training_cols,
-                scaler
-            ) = self._preprocess_dataset(self.dev_data)
-
-            testing_data_scaled, _, _, _ = self._preprocess_dataset(
-                self.testing_data, training_cols, scaler)
-            # Get MAE of test data when neighbors are gotten from train+val.
-
-            total_mae += self._get_mae_of_knn_regressor(
-                self.best_k, dev_data_scaled,
-                testing_data_scaled,
-                dev_targets_np,
-                self.testing_targets
-            )
-
-        return total_mae / 5
-
     def _expand_k_search_space(
             self,
             candidate_k_values: list[int],
+            curr_best_k: int,
+            tried_k: set[int]
     ) -> list[int]:
         '''
-        Returns a new list of candidate k_values.
+        Returns new list of candidate k_values by expanding grid search space.
 
         Keyword arguments:
         candidate_k_values -- the initial search space for best k.
+        curr_best_k -- the current best value for k found.
+        tried_k -- the k values we have tried so far.
         '''
+
+        # The list of new candidates.
+        new_candidates: list[int] = []
 
         step: int
 
-        step = self.step_size_k
+        # If this isn't an edge of a list of candidates.
+        if (
+            curr_best_k != candidate_k_values[0] and
+            curr_best_k != candidate_k_values[-1]
+        ):
 
-        # If we are at the left edge, should be a negative step.
-        if self.best_k == candidate_k_values[0]:
-            step *= - 1
+            # Reduce step size by 75%.
+            step = int(self.step_size_k * 0.25)
 
-        new_candidates: list[int] = []
-        curr_new_candidate: int = self.best_k + step
+            # If we've gone too small, make the step size 2.
+            if step <= 1:
+                step = 2
 
-        # While we haven't exausted positive values and haven't more than 2 new k's.
-        while curr_new_candidate > 0 and len(new_candidates) < 4:
-            new_candidates.append(curr_new_candidate)
+            self.step_size_k = step
+
+            # Take two steps back and two steps forward.
+            new_candidates = [curr_best_k + i*step for i in range(-2, 3)]
+
+        # If this is an edge case i.e. start of prev list or end of prev list.
+        else:
+
+            # Get the step size from the class.
+            step = self.step_size_k
+
+            # If we are at the left edge, should be a negative step.
+            if curr_best_k == candidate_k_values[0]:
+                step *= - 1
+
             # Expand search space according to step.
-            curr_new_candidate += step
+            curr_new_candidate: int = curr_best_k + step
 
-        new_candidates.append(self.best_k)
+            # While we haven't exausted positive values and > 4 new k's.
+            while curr_new_candidate > 0 and len(new_candidates) < 4:
 
-        # Only take odd k's and sort (otherwise will be backwards w/ negative step).
-        new_candidates = sorted([k - 1 if k %
-                                 2 == 0 else k for k in new_candidates])
+                # Add the new candidate.
+                new_candidates.append(curr_new_candidate)
+
+                # Expand search space according to step.
+                curr_new_candidate += step
+
+            # Add the curr_best_k back to the list of candidates.
+            new_candidates.append(curr_best_k)
+
+        # Only take odd k's.
+        new_candidates = list(set([k - 1 if k %
+                                   2 == 0 else k for k in new_candidates]))
+
+        # Only take positive ks that we haven't tried before (or == curr_best).
+        new_candidates = sorted(
+            list(
+                set(
+                    [k for k in new_candidates if k ==
+                        curr_best_k or k not in tried_k and k > 0]
+                )
+            )
+        )
 
         return new_candidates
 
     def _get_best_k(
             self,
-            candidates: list[int] | None = None,
-            best_avg_score: float | None = None
+            dev_data: pd.DataFrame,
+            dev_targets: pd.Series,
+            candidate_k_values: list[int],
+            best_avg_score: float | None = None,
+            curr_best_k: int = 3,
+            tried_k: set[int] = set()
+
     ) -> int:
-        '''Returns the best k found for classification / regression using 5-fold cross-validation.
+        '''Returns best k found using 5-fold cross-validation.
 
         Keyword arguments:
-        candidates -- k values are passed if recursively expanding search space.
+        dev_data -- the unison of the training and validation datasets.
+        dev_targets -- the target values associated with each row of dev_data.
+        candidate_k_values -- the candidates for k currently being considered.
         best_avg_score -- the best average accuracy / MAE recorded so far.
+        curr_best_k -- the best value for k recorded so far.
+        tried_k -- the k values we have tried so far.
         '''
 
+        # If this is the first call on the function.
         if best_avg_score is None:
+            # If classifier set the init best_avg_score to negative infinity.
             if self.regressor_or_classifier == 'classifier':
                 best_avg_score = float('-inf')
+            # If regressor set the init best_avg_score to positive infinity.
             else:
                 best_avg_score = float('inf')
 
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
         candidate_k: int
-        candidate_k_values: list[int]
-
-        # If this is a recursive call, assign candidates accordingly.
-        if candidates:
-            candidate_k_values = candidates
-        else:
-            candidate_k_values = self.candidate_k_values
 
         # For each candidate k value
         for candidate_k in candidate_k_values:
 
-            # total_score is either total MAE or total accuracy (depending on task).
+            # total_score is either total MAE or total accuracy.
             total_score: float = 0.0
+
             train_idx: np.ndarray
             val_idx: np.ndarray
             train_targets: pd.Series
             val_targets: pd.Series
             train_targets_np: np.ndarray
 
-            # For each fold, train the model with 4 folds and validate with remaining.
-            for train_idx, val_idx in kfold.split(self.dev_data):
+            # For each fold, train the model with 4 folds and val w/ remaining.
+            for train_idx, val_idx in kfold.split(dev_data):
 
                 train_data: pd.DataFrame
                 val_data: pd.DataFrame
 
                 # Split data
                 train_data, val_data = (
-                    self.dev_data.iloc[train_idx].copy(),
-                    self.dev_data.iloc[val_idx].copy()
+                    dev_data.iloc[train_idx].copy(),
+                    dev_data.iloc[val_idx].copy()
                 )
 
                 train_data.reset_index(drop=True, inplace=True)
                 val_data.reset_index(drop=True, inplace=True)
 
                 train_targets, val_targets = (
-                    self.dev_targets.iloc[train_idx].copy(),
-                    self.dev_targets.iloc[val_idx].copy()
+                    dev_targets.iloc[train_idx].copy(),
+                    dev_targets.iloc[val_idx].copy()
                 )
 
                 train_targets.reset_index(drop=True, inplace=True)
@@ -701,32 +613,41 @@ class KNNHarness:
 
                 self.curr_k = candidate_k
 
-                # Preprocess the training data and apply transformations to val data.
+                # Preprocess training data and transform val data.
                 (
                     train_data_scaled,
                     train_targets_np,
                     training_cols,
                     scaler
-                ) = self._preprocess_dataset(train_data, training_targets=train_targets)
+                ) = self._preprocess_dataset(train_data, train_targets)
 
                 val_data_scaled, _, _, _ = self._preprocess_dataset(
-                    val_data, training_cols=training_cols, scaler=scaler)
+                    val_data,
+                    train_targets,
+                    training_cols=training_cols,
+                    scaler=scaler
+                )
 
                 score: float
 
+                # Get accuracy for this fold if its a classifier.
                 if self.regressor_or_classifier == 'classifier':
                     score = self._get_accuracy_of_knn_classifier(
                         candidate_k, train_data_scaled,
                         val_data_scaled, train_targets_np, val_targets
                     )
+
+                # Get MAE for this fold if its a regressor.
                 else:
                     score = self._get_mae_of_knn_regressor(
                         candidate_k, train_data_scaled,
                         val_data_scaled, train_targets_np, val_targets
                     )
 
+                # Add the score for this fold to the total_score.
                 total_score += score
 
+            # Get the avg_score by dividing by the number of folds.
             avg_score: float = total_score / kfold.get_n_splits()
 
             # If better than best, update best_score and best_k.
@@ -735,58 +656,54 @@ class KNNHarness:
                 # If classification avg_score is better if higher.
                 if avg_score > best_avg_score:
                     best_avg_score = avg_score
-                    self.best_k = candidate_k
-            
+                    curr_best_k = candidate_k
+
             else:
-            
+
                 # If regression avg_score is better if lower.
                 if avg_score < best_avg_score:
                     best_avg_score = avg_score
-                    self.best_k = candidate_k
-            
-        self.tried_k.update(candidate_k_values)
+                    curr_best_k = candidate_k
 
-        # Default value for best_k if left undefined.
-        if not self.best_k:
-            self.best_k = 3
+        # Update tried_k with the candidate_k_values we just tried.
+        tried_k.update(candidate_k_values)
 
-        if (
-            self.best_k != candidate_k_values[0] and
-            self.best_k != candidate_k_values[-1]
-        ):
+        new_candidates: list[int]
+
+        # Get a new list of candidate k values.
+        new_candidates = self._expand_k_search_space(
+            candidate_k_values, curr_best_k, tried_k)
+
+        # If empty list or new_candidates just has curr_best_k end grid search.
+        if not new_candidates or new_candidates == [curr_best_k]:
+            return curr_best_k
         
-            best_k_index = candidate_k_values.index(self.best_k)
-            step = int(
-                (candidate_k_values[best_k_index + 1] - self.best_k) * 0.25)
-            if step <= 1:
-                step = 2
-            self.step_size_k = step
-            new_candidates = [self.best_k + i*step for i in range(-2, 3)]
-        else:
-            new_candidates = self._expand_k_search_space(candidate_k_values)
+        # Recursive call w/ new candidates.
+        curr_best_k = self._get_best_k(
+            dev_data,
+            dev_targets,
+            new_candidates,
+            best_avg_score,
+            curr_best_k,
+            tried_k
+        )
 
-        new_candidates = sorted(list(set([k for k in new_candidates if k ==
-                                   self.best_k or k not in self.tried_k and k > 0])))
+        return curr_best_k
 
-        if not new_candidates or new_candidates == [self.best_k]:
-            return self.best_k
+    def evaluate(self) -> float:
+        '''Returns MAE or accuracy of kNN on the dataset.'''
 
-        self.best_k = self._get_best_k(
-            new_candidates, best_avg_score)
+        # Total MAE / accuracy (depending on task).
+        total_score: float = 0
 
-        return self.best_k
-
-    def _evaluate_classifier(self) -> float:
-        '''Returns accuracy of KNN classifier on the test set.'''
-
-        total_accuracy: float = 0
-
+        # The indices of the dev data i.e. training + validation.
         dev_idx: np.ndarray
+        # The indices of the testing data.
         test_idx: np.ndarray
 
         kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
 
-        # Nested k-fold cross validation.
+        # 5-fold cross validation.
         # tqdm provides progress bar.
         for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
 
@@ -795,7 +712,8 @@ class KNNHarness:
             dev_targets: pd.Series
             test_targets: pd.Series
 
-            # Split data
+            # Split data into dev and test.
+
             dev_data, test_data = (
                 self.dataset.iloc[dev_idx].copy(),
                 self.dataset.iloc[test_idx].copy()
@@ -806,12 +724,15 @@ class KNNHarness:
                 self.dataset_targets.iloc[test_idx].copy()
             )
 
-            self.dev_data = dev_data
-            self.testing_data = test_data
-            self.dev_targets = dev_targets
-            self.testing_targets = test_targets
+            # Get initial list of candidate k values.
+            candidate_k_values: list[int] = \
+                self._get_initial_candidate_k_values(len(self.dataset))
 
-            self.best_k = self._get_best_k()
+            best_k: int
+
+            # Get best k by getting predictions for validation from training.
+            best_k = self._get_best_k(
+                dev_data, dev_targets, candidate_k_values)
 
             dev_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
@@ -819,38 +740,45 @@ class KNNHarness:
             scaler: StandardScaler
             dev_targets_np: np.ndarray
 
+            self.curr_k = best_k
+
             # Preprocess split datasets.
             (
                 dev_data_scaled,
                 dev_targets_np,
                 training_cols,
                 scaler
-            ) = self._preprocess_dataset(self.dev_data)
+            ) = self._preprocess_dataset(dev_data, dev_targets)
 
             testing_data_scaled, _, _, _ = self._preprocess_dataset(
-                self.testing_data, training_cols, scaler)
+                test_data, dev_targets, training_cols, scaler)
 
-            # Get accuracy of test data when neighbors are gotten from train+val.
-            total_accuracy += self._get_accuracy_of_knn_classifier(
-                self.best_k, dev_data_scaled,
-                testing_data_scaled,
-                dev_targets_np,
-                self.testing_targets
-            )
-        # Did 5 repeated holdouts, return average accuracy.
-        return total_accuracy / 5
+            # Get MAE/accuracy of test data when neighbors are gotten from dev.
 
-    def evaluate(self) -> float:
-        '''Returns error or accuracy rate (depending on task) of kNN on the dataset.'''
+            if self.regressor_or_classifier == 'regressor':
 
-        if self.regressor_or_classifier == 'regressor':
-            return self._evaluate_regressor()
-        else:
-            return self._evaluate_classifier()
+                total_score += self._get_mae_of_knn_regressor(
+                    best_k, dev_data_scaled,
+                    testing_data_scaled,
+                    dev_targets_np,
+                    test_targets
+                )
+
+            else:
+
+                total_score += self._get_accuracy_of_knn_classifier(
+                    best_k, dev_data_scaled,
+                    testing_data_scaled,
+                    dev_targets_np,
+                    test_targets
+                )
+
+        # Divide total_score by number of folds to get average.
+        return total_score / kfold.get_n_splits()
 
 
 # test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
 # test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
-# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-# print(test.evaluate())
+test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+print(test.evaluate())
