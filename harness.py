@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import KFold  # type: ignore
+from sklearn.model_selection import KFold, StratifiedKFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler, LabelEncoder  # type: ignore
 from tqdm import tqdm
@@ -568,7 +568,13 @@ class KNNHarness:
             else:
                 best_avg_score = float('inf')
 
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+        if self.regressor_or_classifier == "classifier":
+            kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(dev_data, dev_targets))
+        else:
+            kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(dev_data))
+
         candidate_k: int
 
         # For each candidate k value
@@ -584,7 +590,7 @@ class KNNHarness:
             train_targets_np: np.ndarray
 
             # For each fold, train the model with 4 folds and val w/ remaining.
-            for train_idx, val_idx in kfold.split(dev_data):
+            for train_idx, val_idx in folds:
 
                 train_data: pd.DataFrame
                 val_data: pd.DataFrame
@@ -677,7 +683,7 @@ class KNNHarness:
         # If empty list or new_candidates just has curr_best_k end grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
             return curr_best_k
-        
+
         # Recursive call w/ new candidates.
         curr_best_k = self._get_best_k(
             dev_data,
@@ -701,11 +707,16 @@ class KNNHarness:
         # The indices of the testing data.
         test_idx: np.ndarray
 
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+        if self.regressor_or_classifier == "classifier":
+            kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(self.dataset, self.dataset_targets))
+        else:
+            kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(self.dataset))
 
         # 5-fold cross validation.
         # tqdm provides progress bar.
-        for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
+        for dev_idx, test_idx in tqdm(folds):
 
             dev_data: pd.DataFrame
             test_data: pd.DataFrame
@@ -741,7 +752,7 @@ class KNNHarness:
             dev_targets_np: np.ndarray
 
             self.curr_k = best_k
-
+            
             # Preprocess split datasets.
             (
                 dev_data_scaled,
@@ -772,13 +783,12 @@ class KNNHarness:
                     dev_targets_np,
                     test_targets
                 )
-
         # Divide total_score by number of folds to get average.
         return total_score / kfold.get_n_splits()
 
 
-# test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
-# test = KNNHarness('classifier', 'datasets/heart.data', 'num')
+# test = KNNHarness('classifier', 'datasets/wine.data', 'class')
+test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
-test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-print(test.evaluate())
+# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+# print(test.evaluate())

@@ -38,7 +38,7 @@ class WeightedKNNHarness(KNNHarness):
         Keyword arguments:
         example_to_predict -- the example we are running the classification on.
         dataset -- the dataset to get the nearest neighbors from.
-        target_column -- column w/ the class labels of the examples in the dataset.
+        target_column -- column w/ the class labels of the examples in dataset.
         k -- the number of closest neighbors to use in the mode calculation.
         '''
 
@@ -46,7 +46,7 @@ class WeightedKNNHarness(KNNHarness):
         distances: np.ndarray = np.sqrt(
             np.sum((dataset - example_to_predict) ** 2, axis=1))
 
-        # Check for zero distances and add a small value to avoid division by zero.
+        # Check for 0 distances & add a small value to avoid division by zero.
         small_constant: np.number = np.nextafter(np.float32(0), np.float32(1))
         distances = np.where(distances == 0, small_constant, distances)
 
@@ -84,15 +84,15 @@ class WeightedKNNHarness(KNNHarness):
         Keyword arguments:
         example_to_predict -- the example we are running the regression on.
         dataset -- the dataset to get the nearest neighbors from.
-        target_column -- column w/ target values of the examples in the dataset.
-        k -- the number of closest neighbors to use in the weighted mean calculation.
+        target_column -- column w/ target values of examples in the dataset.
+        k -- the number of closest neighbors to use in weighted mean calc.
         '''
 
         # Compute euclidean distances using vectorized operations.
         distances: np.ndarray = np.sqrt(
             np.sum((dataset - example_to_predict) ** 2, axis=1))
 
-        # Check for zero distances and add a small value to avoid division by zero.
+        # Check for 0 distances & add a small value to avoid division by zero.
         small_constant: np.number = np.nextafter(np.float32(0), np.float32(1))
         distances = np.where(distances == 0, small_constant, distances)
 

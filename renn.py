@@ -1,4 +1,6 @@
-from imblearn.under_sampling import RepeatedEditedNearestNeighbours  # type: ignore
+from imblearn.under_sampling import (
+    RepeatedEditedNearestNeighbours  # type: ignore
+)
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler  # type: ignore
@@ -33,13 +35,13 @@ class RENNHarness(KNNHarness):
         training_cols: pd.Index | None = None,
         scaler: StandardScaler | None = None,
     ) -> tuple[np.ndarray, np.ndarray, pd.Index, StandardScaler]:
-        '''Preprocesses data, returns cols & scaler used. Also applies RENN if training.
+        '''Preprocesses data, returns cols & scaler. Applies RENN if train.
 
         Keyword arguments:
         dataset -- the dataset we wish to preprocess.
         training_targets -- the targets associated with the training dataset.
-        training_cols -- defaults to None; used to account for missing cols post split.
-        scaler -- the StandardScaler used to scale the data, init if None is passed.
+        training_cols -- defaults to None; used to account for missing cols.
+        scaler -- the StandardScaler used to scale the data, init if None.
         '''
 
         # Check if this is a training set that is being preprocessed.
@@ -64,7 +66,7 @@ class RENNHarness(KNNHarness):
             scaler,
         )
 
-        # If it's a training set, apply RENN to it and update dataset and targets.
+        # If it's a training set, apply RENN to it & update dataset & targets.
         if is_training_set and self.regressor_or_classifier == 'classifier':
 
             renn = RepeatedEditedNearestNeighbours(
