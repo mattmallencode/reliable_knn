@@ -316,7 +316,9 @@ class KNNHarness:
             self,
             example_to_get_neighbors_of: np.ndarray,
             dataset: np.ndarray,
-            k: int = 3
+            k: int = 3,
+            removed_examples = None,
+            example_to_exclude: int = 0
     ) -> np.ndarray:
         '''Returns k nearest neighbors of an example (as an array of indices).
 
@@ -329,7 +331,6 @@ class KNNHarness:
         # Compute euclidean distances using vectorized operations.
         distances: np.ndarray = np.sqrt(
             np.sum((dataset - example_to_get_neighbors_of)**2, axis=1))
-
         # Get indices of the k smallest distances
         indices: np.ndarray = np.argsort(distances)[:k]
 
@@ -635,6 +636,7 @@ class KNNHarness:
                 )
 
                 score: float
+                
 
                 # Get accuracy for this fold if its a classifier.
                 if self.regressor_or_classifier == 'classifier':
@@ -788,7 +790,7 @@ class KNNHarness:
 
 
 # test = KNNHarness('classifier', 'datasets/wine.data', 'class')
-test = KNNHarness('classifier', 'datasets/heart.data', 'num')
+# test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
 # test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
 # print(test.evaluate())
