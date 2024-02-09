@@ -5,8 +5,8 @@ method."""
 #          Dayvid Oliveira
 #          Christos Aridas
 # License: MIT
-# Modifications (by Matt Mallen): 
-# agrees function is new 
+# Modifications (by Matt Mallen):
+# agrees function is new
 # fit_resample of ENN has been modified to support regressors.
 # (as have the ENN and RENN constructors)
 
@@ -137,13 +137,14 @@ class EditedNearestNeighbours(BaseCleaningSampler):
     def __init__(
         self,
         *,
+        training_targets: np.ndarray,
         regressor_or_classifier: str,
         sampling_strategy="auto",
         n_neighbors=3,
         kind_sel="all",
         n_jobs=None,
         theta: float = 2,
-        agree_func: str = "sd_neighbors"
+        agree_func: str = "sd_neighbors",
     ):
         super().__init__(sampling_strategy=sampling_strategy)
         self.n_neighbors = n_neighbors
@@ -152,6 +153,7 @@ class EditedNearestNeighbours(BaseCleaningSampler):
         self._agree_func = agree_func
         self._theta = theta
         self._regressor_or_classifier = regressor_or_classifier
+        self._sd_whole = np.std(training_targets)
 
     def _validate_estimator(self):
         """Validate the estimator created in the ENN."""
@@ -173,12 +175,11 @@ class EditedNearestNeighbours(BaseCleaningSampler):
         if self._agree_func == "given":
             tolerance = self._theta
         elif self._agree_func == "sd_whole":
-            tolerance = self._theta * np.std(neighbor_targets)
+            tolerance = self._theta * self._sd_whole
         elif self._agree_func == "sd_neighbors":
             tolerance = self._theta * np.std(neighbor_targets)
         else:
             raise ValueError(f"Invalid agree_func: {self._agree_func}")
-        
 
         if self._regressor_or_classifier == "classifier":
             if kind_sel == "mode":
@@ -188,7 +189,7 @@ class EditedNearestNeighbours(BaseCleaningSampler):
             elif kind_sel == "all":
                 # Check if all neighbors belong to same class as the sample.
                 return np.all(neighbor_targets == sample_target, axis=1)
-            
+
         # If a regressor.
         else:
             if kind_sel == "mode":
@@ -200,7 +201,7 @@ class EditedNearestNeighbours(BaseCleaningSampler):
             elif kind_sel == "all":
                 # For 'all', check if all neighbors are within tolerance.
                 return np.all(abs(neighbor_targets - sample_target) < tolerance)
-    
+
     def _fit_resample(self, X, y):
         self._validate_estimator()
 
@@ -214,7 +215,9 @@ class EditedNearestNeighbours(BaseCleaningSampler):
                     target_class_indices = np.flatnonzero(y == target_class)
                     X_class = _safe_indexing(X, target_class_indices)
                     y_target = _safe_indexing(y, target_class_indices)
-                    nnhood_idx = self.nn_.kneighbors(X_class, return_distance=False)[:, 1:]
+                    nnhood_idx = self.nn_.kneighbors(X_class, return_distance=False)[
+                        :, 1:
+                    ]
                     nnhood_targets = y[nnhood_idx]
                     # Keep the example if it agrees with its neighbors.
                     nnhood_bool = self._agrees(y_target, nnhood_targets, self.kind_sel)
@@ -375,6 +378,7 @@ class RepeatedEditedNearestNeighbours(BaseCleaningSampler):
     def __init__(
         self,
         *,
+        training_targets: np.ndarray,
         regressor_or_classifier: str,
         sampling_strategy="auto",
         n_neighbors=3,
@@ -382,7 +386,7 @@ class RepeatedEditedNearestNeighbours(BaseCleaningSampler):
         kind_sel="all",
         n_jobs=None,
         theta: float = 2,
-        agree_func: str = "sd_neighbors"
+        agree_func: str = "sd_neighbors",
     ):
         super().__init__(sampling_strategy=sampling_strategy)
         self.n_neighbors = n_neighbors
@@ -392,6 +396,7 @@ class RepeatedEditedNearestNeighbours(BaseCleaningSampler):
         self._regressor_or_classifier = regressor_or_classifier
         self._theta = theta
         self._agree_func = agree_func
+        self._training_targets = training_targets
 
     def _validate_estimator(self):
         """Private function to create the NN estimator"""
@@ -400,13 +405,14 @@ class RepeatedEditedNearestNeighbours(BaseCleaningSampler):
         )
 
         self.enn_ = EditedNearestNeighbours(
+            training_targets=self._training_targets,
             sampling_strategy=self.sampling_strategy,
             n_neighbors=self.nn_,
             kind_sel=self.kind_sel,
             n_jobs=self.n_jobs,
             regressor_or_classifier=self._regressor_or_classifier,
             theta=self._theta,
-            agree_func=self._agree_func
+            agree_func=self._agree_func,
         )
 
     def _fit_resample(self, X, y):
