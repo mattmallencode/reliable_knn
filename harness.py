@@ -1,9 +1,10 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import KFold  # type: ignore
+from sklearn.model_selection import KFold, StratifiedKFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler, LabelEncoder  # type: ignore
 from tqdm import tqdm
+import multiprocessing as mp
 
 
 class KNNHarness:
@@ -568,7 +569,13 @@ class KNNHarness:
             else:
                 best_avg_score = float('inf')
 
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+        if self.regressor_or_classifier == "classifier":
+            kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(dev_data, dev_targets))
+        else:
+            kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(dev_data))
+
         candidate_k: int
 
         # For each candidate k value
@@ -584,7 +591,7 @@ class KNNHarness:
             train_targets_np: np.ndarray
 
             # For each fold, train the model with 4 folds and val w/ remaining.
-            for train_idx, val_idx in kfold.split(dev_data):
+            for train_idx, val_idx in folds:
 
                 train_data: pd.DataFrame
                 val_data: pd.DataFrame
@@ -677,7 +684,7 @@ class KNNHarness:
         # If empty list or new_candidates just has curr_best_k end grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
             return curr_best_k
-        
+
         # Recursive call w/ new candidates.
         curr_best_k = self._get_best_k(
             dev_data,
@@ -690,95 +697,129 @@ class KNNHarness:
 
         return curr_best_k
 
+    def evaluate_fold(
+        self,
+        dev_idx: np.ndarray,
+        test_idx: np.ndarray
+    ) -> float:
+        '''Returns the accuracy / MAE of kNN when evaluated on a given fold.
+
+        Keyword arguments:
+        dev_idx -- the indices of the dev data i.e. training + validation.
+        test_idx -- the indices of the testing data.
+        '''
+
+        dev_data: pd.DataFrame
+        test_data: pd.DataFrame
+        dev_targets: pd.Series
+        test_targets: pd.Series
+
+        # Split data into dev and test.
+
+        dev_data, test_data = (
+            self.dataset.iloc[dev_idx].copy(),
+            self.dataset.iloc[test_idx].copy()
+        )
+
+        dev_targets, test_targets = (
+            self.dataset_targets.iloc[dev_idx].copy(),
+            self.dataset_targets.iloc[test_idx].copy()
+        )
+
+        # Get initial list of candidate k values.
+        candidate_k_values: list[int] = \
+            self._get_initial_candidate_k_values(len(self.dataset))
+
+        best_k: int
+
+        import random
+
+        best_k = random.choice(candidate_k_values)
+
+        # Get best k by getting predictions for validation from training.
+        # TODO: UNCOMMENT FOR EXPERIMENTS AND REMOVE RANDOM.
+
+        # best_k = self._get_best_k(
+        #        dev_data, dev_targets, candidate_k_values)
+        dev_data_scaled: np.ndarray
+        testing_data_scaled: np.ndarray
+        training_cols: pd.Index
+        scaler: StandardScaler
+        dev_targets_np: np.ndarray
+
+        self.curr_k = best_k
+
+        # Preprocess split datasets.
+        (
+            dev_data_scaled,
+            dev_targets_np,
+            training_cols,
+            scaler
+        ) = self._preprocess_dataset(dev_data, dev_targets)
+
+        testing_data_scaled, _, _, _ = self._preprocess_dataset(
+            test_data, dev_targets, training_cols, scaler)
+
+        # Get MAE/accuracy of test data when neighbors are gotten from dev.
+
+        if self.regressor_or_classifier == 'regressor':
+
+            return self._get_mae_of_knn_regressor(
+                best_k, dev_data_scaled,
+                testing_data_scaled,
+                dev_targets_np,
+                test_targets
+            )
+
+        else:
+
+            return self._get_accuracy_of_knn_classifier(
+                best_k, dev_data_scaled,
+                testing_data_scaled,
+                dev_targets_np,
+                test_targets
+            )
+
     def evaluate(self) -> float:
         '''Returns MAE or accuracy of kNN on the dataset.'''
 
         # Total MAE / accuracy (depending on task).
         total_score: float = 0
 
-        # The indices of the dev data i.e. training + validation.
-        dev_idx: np.ndarray
-        # The indices of the testing data.
-        test_idx: np.ndarray
+        if self.regressor_or_classifier == "classifier":
+            kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(self.dataset, self.dataset_targets))
+        else:
+            kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+            folds = list(kfold.split(self.dataset))
 
-        kfold: KFold = KFold(n_splits=5, shuffle=True, random_state=42)
+        # List of the error estimates for each fold.
+        error_estimates: list[int] = []
 
-        # 5-fold cross validation.
-        # tqdm provides progress bar.
-        for dev_idx, test_idx in tqdm(kfold.split(self.dataset), total=5):
+        def log_error_estimate(x: float) -> float:
+            '''Appends x to error_estimates.'''
+            error_estimates.append(x)
 
-            dev_data: pd.DataFrame
-            test_data: pd.DataFrame
-            dev_targets: pd.Series
-            test_targets: pd.Series
+        # Multiprocessing pool for each fold.
+        pool: mp.Pool = mp.Pool(5)
 
-            # Split data into dev and test.
+        # Spin up a process for each fold.
+        for fold in folds:
+            pool.apply_async(self.evaluate_fold, args=(
+                fold[0], fold[1]), callback=log_error_estimate)
+            
+        # Clean up pool.
+        pool.close()
+        pool.join()
 
-            dev_data, test_data = (
-                self.dataset.iloc[dev_idx].copy(),
-                self.dataset.iloc[test_idx].copy()
-            )
+        # Calculate the average score.
+        total_score = sum(error_estimates) / len(error_estimates)
 
-            dev_targets, test_targets = (
-                self.dataset_targets.iloc[dev_idx].copy(),
-                self.dataset_targets.iloc[test_idx].copy()
-            )
-
-            # Get initial list of candidate k values.
-            candidate_k_values: list[int] = \
-                self._get_initial_candidate_k_values(len(self.dataset))
-
-            best_k: int
-
-            # Get best k by getting predictions for validation from training.
-            best_k = self._get_best_k(
-                dev_data, dev_targets, candidate_k_values)
-
-            dev_data_scaled: np.ndarray
-            testing_data_scaled: np.ndarray
-            training_cols: pd.Index
-            scaler: StandardScaler
-            dev_targets_np: np.ndarray
-
-            self.curr_k = best_k
-
-            # Preprocess split datasets.
-            (
-                dev_data_scaled,
-                dev_targets_np,
-                training_cols,
-                scaler
-            ) = self._preprocess_dataset(dev_data, dev_targets)
-
-            testing_data_scaled, _, _, _ = self._preprocess_dataset(
-                test_data, dev_targets, training_cols, scaler)
-
-            # Get MAE/accuracy of test data when neighbors are gotten from dev.
-
-            if self.regressor_or_classifier == 'regressor':
-
-                total_score += self._get_mae_of_knn_regressor(
-                    best_k, dev_data_scaled,
-                    testing_data_scaled,
-                    dev_targets_np,
-                    test_targets
-                )
-
-            else:
-
-                total_score += self._get_accuracy_of_knn_classifier(
-                    best_k, dev_data_scaled,
-                    testing_data_scaled,
-                    dev_targets_np,
-                    test_targets
-                )
-
-        # Divide total_score by number of folds to get average.
-        return total_score / kfold.get_n_splits()
+        return total_score
 
 
-# test = KNNHarness('classifier', 'datasets/zoo.data', 'type')
+# test = KNNHarness('classifier', 'datasets/wine.data', 'class')
 # test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
-test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
-print(test.evaluate())
+# test = KNNHarness('regressor', 'datasets/abalone.data', 'Rings')
+# print(test.evaluate())
