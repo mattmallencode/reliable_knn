@@ -295,7 +295,7 @@ class RENNHarness(KNNHarness):
         dev_targets -- the target values associated with each row of dev_data.
         candidate_k -- the candidate k currently being considered.
         n_splits -- the number of k fold splits.
-        agree_func -- the agreement function to use for RENN.
+        agree_func -- the agreement function to use for RENN regression.
         kind_sel -- the selection function to use for RENN.
         theta -- the theta / tolerance to use for RENN regression.
         """
@@ -404,6 +404,6 @@ class RENNHarness(KNNHarness):
 
 
 # test = RENNHarness("regressor", "datasets/regression/student_portugese.data", "G3")
-test = RENNHarness("classifier", "datasets/classification/heart.data", "num")
-# test = RENNHarness("regressor", "datasets/regression/automobile.data", "symboling")
+# test = RENNHarness("classifier", "datasets/classification/heart.data", "num")
+test = RENNHarness("regressor", "datasets/regression/automobile.data", "symboling")
 print(test.evaluate())

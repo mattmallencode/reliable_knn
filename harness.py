@@ -566,7 +566,7 @@ class KNNHarness:
         candidate_k: int
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        # candidate_k_values = [3]
+        candidate_k_values = [3]
 
         # For each candidate k value
         for candidate_k in candidate_k_values:
@@ -672,7 +672,7 @@ class KNNHarness:
         )
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        # new_candidates = [3]
+        new_candidates = [3]
 
         # If empty list or new_candidates just has curr_best_k end grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
