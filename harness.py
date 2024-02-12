@@ -3,7 +3,9 @@ import numpy as np
 from sklearn.model_selection import KFold, StratifiedKFold  # type: ignore
 from sklearn.metrics import mean_absolute_error, accuracy_score  # type: ignore
 from sklearn.preprocessing import StandardScaler, LabelEncoder  # type: ignore
-import multiprocessing as mp
+import multiprocessing as mp  # type: ignore
+import traceback
+import tqdm
 
 
 class KNNHarness:
@@ -132,7 +134,6 @@ class KNNHarness:
         # Drop rows containing NaN.
         dataset.dropna(inplace=True)
 
-        print(dataset)
         # Exclude the target column from the dataset.
         self.dataset = dataset.drop(columns=[self.target_column_name])
         # Put the excluded target column into a Series.
@@ -396,6 +397,10 @@ class KNNHarness:
         # The list of our predicted values.
         predictions: list[float] = []
 
+        # Added to account for all data being removed by an editing algo.
+        if len(training_dataset) < k:
+            return float("inf")
+
         # Predict the target value for each example in the testing dataset.
         for example in testing_dataset:
             predicted_value = self._knn_regressor(
@@ -560,6 +565,8 @@ class KNNHarness:
 
         candidate_k: int
 
+        candidate_k_values = [3]
+
         # For each candidate k value
         for candidate_k in candidate_k_values:
             # total_score is either total MAE or total accuracy.
@@ -663,6 +670,8 @@ class KNNHarness:
             candidate_k_values, curr_best_k, tried_k
         )
 
+        new_candidates = [3]
+
         # If empty list or new_candidates just has curr_best_k end grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
             return curr_best_k
@@ -674,7 +683,7 @@ class KNNHarness:
 
         return curr_best_k
 
-    def evaluate_fold(self, dev_idx: np.ndarray, test_idx: np.ndarray) -> float:
+    def _evaluate_fold(self, dev_idx: np.ndarray, test_idx: np.ndarray) -> float:
         """Returns the accuracy / MAE of kNN when evaluated on a given fold.
 
         Keyword arguments:
@@ -682,78 +691,78 @@ class KNNHarness:
         test_idx -- the indices of the testing data.
         """
 
-        dev_data: pd.DataFrame
-        test_data: pd.DataFrame
-        dev_targets: pd.Series
-        test_targets: pd.Series
+        try:
+            dev_data: pd.DataFrame
+            test_data: pd.DataFrame
+            dev_targets: pd.Series
+            test_targets: pd.Series
 
-        # Split data into dev and test.
+            # Split data into dev and test.
 
-        dev_data, test_data = (
-            self.dataset.iloc[dev_idx].copy(),
-            self.dataset.iloc[test_idx].copy(),
-        )
-
-        dev_targets, test_targets = (
-            self.dataset_targets.iloc[dev_idx].copy(),
-            self.dataset_targets.iloc[test_idx].copy(),
-        )
-
-        # Get initial list of candidate k values.
-        candidate_k_values: list[int] = self._get_initial_candidate_k_values(
-            len(self.dataset)
-        )
-
-        best_k: int
-
-        import random
-
-        best_k = random.choice(candidate_k_values)
-
-        # Get best k by getting predictions for validation from training.
-        # TODO: UNCOMMENT FOR EXPERIMENTS AND REMOVE RANDOM.
-
-        # best_k = self._get_best_k(
-        #        dev_data, dev_targets, candidate_k_values)
-        dev_data_scaled: np.ndarray
-        testing_data_scaled: np.ndarray
-        training_cols: pd.Index
-        scaler: StandardScaler
-        dev_targets_np: np.ndarray
-
-        self.curr_k = best_k
-
-        # Preprocess split datasets.
-        (
-            dev_data_scaled,
-            dev_targets_np,
-            training_cols,
-            scaler,
-        ) = self._preprocess_dataset(dev_data, dev_targets)
-
-        testing_data_scaled, _, _, _ = self._preprocess_dataset(
-            test_data, dev_targets, training_cols, scaler
-        )
-
-        # Get MAE/accuracy of test data when neighbors are gotten from dev.
-
-        if self.regressor_or_classifier == "regressor":
-            return self._get_mae_of_knn_regressor(
-                best_k,
-                dev_data_scaled,
-                testing_data_scaled,
-                dev_targets_np,
-                test_targets,
+            dev_data, test_data = (
+                self.dataset.iloc[dev_idx].copy(),
+                self.dataset.iloc[test_idx].copy(),
             )
 
-        else:
-            return self._get_accuracy_of_knn_classifier(
-                best_k,
-                dev_data_scaled,
-                testing_data_scaled,
-                dev_targets_np,
-                test_targets,
+            dev_targets, test_targets = (
+                self.dataset_targets.iloc[dev_idx].copy(),
+                self.dataset_targets.iloc[test_idx].copy(),
             )
+
+            # Get initial list of candidate k values.
+            candidate_k_values: list[int] = self._get_initial_candidate_k_values(
+                len(self.dataset)
+            )
+
+            best_k: int
+
+            # best_k = random.choice(candidate_k_values)
+
+            # Get best k by getting predictions for validation from training.
+            # TODO: UNCOMMENT FOR EXPERIMENTS AND REMOVE RANDOM.
+            best_k = self._get_best_k(dev_data, dev_targets, candidate_k_values)
+            dev_data_scaled: np.ndarray
+            testing_data_scaled: np.ndarray
+            training_cols: pd.Index
+            scaler: StandardScaler
+            dev_targets_np: np.ndarray
+
+            self.curr_k = best_k
+
+            # Preprocess split datasets.
+            (
+                dev_data_scaled,
+                dev_targets_np,
+                training_cols,
+                scaler,
+            ) = self._preprocess_dataset(dev_data, dev_targets)
+
+            testing_data_scaled, _, _, _ = self._preprocess_dataset(
+                test_data, dev_targets, training_cols, scaler
+            )
+
+            # Get MAE/accuracy of test data when neighbors are gotten from dev.
+
+            if self.regressor_or_classifier == "regressor":
+                return self._get_mae_of_knn_regressor(
+                    best_k,
+                    dev_data_scaled,
+                    testing_data_scaled,
+                    dev_targets_np,
+                    test_targets,
+                )
+
+            else:
+                return self._get_accuracy_of_knn_classifier(
+                    best_k,
+                    dev_data_scaled,
+                    testing_data_scaled,
+                    dev_targets_np,
+                    test_targets,
+                )
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
 
     def evaluate(self) -> float:
         """Returns MAE or accuracy of kNN on the dataset."""
@@ -769,19 +778,25 @@ class KNNHarness:
             folds = list(kfold.split(self.dataset))
 
         # List of the error estimates for each fold.
-        error_estimates: list[int] = []
+        error_estimates: list[float] = []
 
-        def log_error_estimate(x: float) -> float:
+        progress_bar = tqdm.tqdm(total=5)
+
+        def log_error_estimate(x: float) -> None:
             """Appends x to error_estimates."""
             error_estimates.append(x)
+            progress_bar.update()
+            return
 
         # Multiprocessing pool for each fold.
-        pool: mp.Pool = mp.Pool(5)
+        pool = mp.Pool(5)
 
         # Spin up a process for each fold.
         for fold in folds:
             pool.apply_async(
-                self.evaluate_fold, args=(fold[0], fold[1]), callback=log_error_estimate
+                self._evaluate_fold,
+                args=(fold[0], fold[1]),
+                callback=log_error_estimate,
             )
 
         # Clean up pool.
@@ -794,8 +809,8 @@ class KNNHarness:
         return total_score
 
 
-# test = KNNHarness('classifier', 'datasets/wine.data', 'class')
+# test = KNNHarness("classifier", "datasets/classification/wine_origin.data", "class")
 # test = KNNHarness('classifier', 'datasets/heart.data', 'num')
 # print(test.evaluate())
-test = KNNHarness("regressor", "datasets/regression/automobile.data", "symboling")
-print(test.evaluate())
+# test = KNNHarness("regressor", "datasets/regression/automobile.data", "symboling")
+# print(test.evaluate())
