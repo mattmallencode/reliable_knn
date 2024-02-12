@@ -178,8 +178,6 @@ class EditedNearestNeighbours(BaseCleaningSampler):
             tolerance = self._theta * self._sd_whole
         elif self._agree_func == "sd_neighbors":
             tolerance = self._theta * np.std(neighbor_targets)
-        else:
-            raise ValueError(f"Invalid agree_func: {self._agree_func}")
 
         if self._regressor_or_classifier == "classifier":
             if kind_sel == "mode":

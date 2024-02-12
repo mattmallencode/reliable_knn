@@ -565,7 +565,8 @@ class KNNHarness:
 
         candidate_k: int
 
-        candidate_k_values = [3]
+        # TODO: COMMENT FOR ACTUAL EXPERIMENTS
+        # candidate_k_values = [3]
 
         # For each candidate k value
         for candidate_k in candidate_k_values:
@@ -670,7 +671,8 @@ class KNNHarness:
             candidate_k_values, curr_best_k, tried_k
         )
 
-        new_candidates = [3]
+        # TODO: COMMENT FOR ACTUAL EXPERIMENTS
+        # new_candidates = [3]
 
         # If empty list or new_candidates just has curr_best_k end grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
@@ -763,6 +765,7 @@ class KNNHarness:
         except Exception as e:
             print(e)
             traceback.print_exc()
+            exit(1)
 
     def evaluate(self) -> float:
         """Returns MAE or accuracy of kNN on the dataset."""
