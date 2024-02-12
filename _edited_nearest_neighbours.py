@@ -178,8 +178,6 @@ class EditedNearestNeighbours(BaseCleaningSampler):
             tolerance = self._theta * self._sd_whole
         elif self._agree_func == "sd_neighbors":
             tolerance = self._theta * np.std(neighbor_targets)
-        else:
-            raise ValueError(f"Invalid agree_func: {self._agree_func}")
 
         if self._regressor_or_classifier == "classifier":
             if kind_sel == "mode":
@@ -188,7 +186,7 @@ class EditedNearestNeighbours(BaseCleaningSampler):
                 return np.ravel(mode_class) == sample_target
             elif kind_sel == "all":
                 # Check if all neighbors belong to same class as the sample.
-                return np.all(neighbor_targets == sample_target, axis=1)
+                return np.all(neighbor_targets == sample_target[0], axis=1)
 
         # If a regressor.
         else:
@@ -197,7 +195,7 @@ class EditedNearestNeighbours(BaseCleaningSampler):
                 within_tolerance = np.sum(
                     abs(neighbor_targets - sample_target) < tolerance
                 )
-                return within_tolerance > len(neighbor_targets) / 2
+                return within_tolerance > (len(neighbor_targets) // 2)
             elif kind_sel == "all":
                 # For 'all', check if all neighbors are within tolerance.
                 return np.all(abs(neighbor_targets - sample_target) < tolerance)
