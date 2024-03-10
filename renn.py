@@ -31,16 +31,12 @@ class RENNHarness(KNNHarness):
             target_column_name,
             missing_values,
         )
-
-        agree_func: str = "sd_neighbors"
-        kind_sel: str = "all"
-        theta = 0.5
-        self._curr_theta: float | None = theta
-        self._curr_agree_func: str | None = agree_func
-        self._curr_kind_sel: str | None = kind_sel
-        self._best_agree_func: str | None = agree_func
-        self._best_kind_sel: str | None = kind_sel
-        self._best_theta: float | None = theta
+        self._curr_theta: float | None = 0.5
+        self._curr_agree_func: str | None = "sd_neighbors"
+        self._curr_kind_sel: str | None = "mode"
+        self._best_agree_func: str | None = self._curr_agree_func
+        self._best_kind_sel: str | None = self._curr_kind_sel
+        self._best_theta: float | None = self._curr_theta
         self._agree_funcs = ["sd_neighbors", "sd_whole"]
         self._thetas = [0.5, 1, 1.5, 2, 2.5]
         self._kind_sels = ["mode", "all"]
@@ -162,6 +158,8 @@ class RENNHarness(KNNHarness):
 
         return (dataset_np, training_targets_np, training_cols, scaler)
 
+    """"""
+
     def _get_best_k(
         self,
         dev_data: pd.DataFrame,
@@ -187,7 +185,7 @@ class RENNHarness(KNNHarness):
             tried_k.add(1)
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        candidate_k_values = [3]
+        # candidate_k_values = [9]
 
         # If this is the first call on the function.
         if best_avg_score is None:
@@ -213,7 +211,7 @@ class RENNHarness(KNNHarness):
                 for agree_func in self.agree_funcs:
                     for kind_sel in self.kind_sels:
                         for theta in self.thetas:
-                            curr_best_k = self._get_best_k_helper(
+                            curr_best_k, best_avg_score = self._get_best_k_helper(
                                 curr_best_k,
                                 best_avg_score,
                                 folds,
@@ -228,7 +226,7 @@ class RENNHarness(KNNHarness):
         else:
             for candidate_k in candidate_k_values:
                 for kind_sel in self.kind_sels:
-                    curr_best_k = self._get_best_k_helper(
+                    curr_best_k, best_avg_score = self._get_best_k_helper(
                         curr_best_k,
                         best_avg_score,
                         folds,
@@ -250,10 +248,17 @@ class RENNHarness(KNNHarness):
         )
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        new_candidates = [3]
+        # new_candidates = [9]
 
         # If empty list or new_candidates just has curr_best_k end grid search.
-        if not new_candidates or new_candidates == [curr_best_k]:
+        if (
+            not new_candidates
+            or new_candidates == [curr_best_k]
+            or new_candidates[-1] > (len(dev_data) * 0.8)
+        ):
+            self.curr_theta = self.best_theta
+            self.curr_agree_func = self.best_agree_func
+            self.curr_kind_sel = self.best_kind_sel
             return curr_best_k
 
         # Recursive call w/ new candidates.
@@ -275,7 +280,7 @@ class RENNHarness(KNNHarness):
     def _get_best_k_helper(
         self,
         curr_best_k: int,
-        best_avg_score: float,
+        best_avg_score: float | None,
         folds: list,
         dev_data: pd.DataFrame,
         dev_targets: pd.Series,
@@ -299,6 +304,7 @@ class RENNHarness(KNNHarness):
         kind_sel -- the selection function to use for RENN.
         theta -- the theta / tolerance to use for RENN regression.
         """
+
         self.curr_agree_func = agree_func
         self.curr_kind_sel = kind_sel
         self.curr_theta = theta
@@ -390,7 +396,7 @@ class RENNHarness(KNNHarness):
             if avg_score > best_avg_score:
                 best_avg_score = avg_score
                 curr_best_k = candidate_k
-                self.best_kind_sel = kind_sel
+                self.best_kind_sel = self.curr_kind_sel
         else:
             # If regression avg_score is better if lower.
             if avg_score < best_avg_score:
@@ -398,12 +404,20 @@ class RENNHarness(KNNHarness):
                 curr_best_k = candidate_k
                 self.best_theta = theta
                 self.best_agree_func = agree_func
-                self.best_kind_sel = kind_sel
+                self.best_kind_sel = self.curr_kind_sel
 
-        return curr_best_k
+        self.curr_kind_sel = self.best_kind_sel
+        return curr_best_k, best_avg_score
 
 
 # test = RENNHarness("regressor", "datasets/regression/student_portugese.data", "G3")
 # test = RENNHarness("classifier", "datasets/classification/heart.data", "num")
-test = RENNHarness("regressor", "datasets/regression/automobile.data", "symboling")
-print(test.evaluate())
+# print("STUDENT MATH:")
+# test = RENNHarness("regressor", "datasets/regression/student_math.data", "G3")
+# print(test.evaluate())
+# print("STUDENT PORTUGESE:")
+# test = RENNHarness("regressor", "datasets/regression/student_portugese.data", "G3")
+# print(test.evaluate())
+# print("ABALONE:")
+# test = RENNHarness("regressor", "datasets/regression/abalone.data", "Rings")
+# print(test.evaluate())
