@@ -424,7 +424,7 @@ class BBNRHarness(KNNHarness):
             tried_k.add(1)
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        candidate_k_values = [3]
+        # candidate_k_values = [9]
 
         # If this is the first call on the function.
         if best_avg_score is None:
@@ -449,7 +449,7 @@ class BBNRHarness(KNNHarness):
             for candidate_k in candidate_k_values:
                 for agree_func in self.agree_funcs:
                     for theta in self.thetas:
-                        curr_best_k = self._get_best_k_helper(
+                        curr_best_k, best_avg_score = self._get_best_k_helper(
                             curr_best_k,
                             best_avg_score,
                             folds,
@@ -462,7 +462,7 @@ class BBNRHarness(KNNHarness):
                         )
         else:
             for candidate_k in candidate_k_values:
-                curr_best_k = self._get_best_k_helper(
+                curr_best_k, best_avg_score = self._get_best_k_helper(
                     curr_best_k,
                     best_avg_score,
                     folds,
@@ -483,10 +483,16 @@ class BBNRHarness(KNNHarness):
         )
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        new_candidates = [3]
+        # new_candidates = [9]
 
         # If empty list or new_candidates just has curr_best_k end grid search.
-        if not new_candidates or new_candidates == [curr_best_k]:
+        if (
+            not new_candidates
+            or new_candidates == [curr_best_k]
+            or new_candidates[-1] > (len(dev_data) * 0.8)
+        ):
+            self.curr_theta = self.best_theta
+            self.curr_agree_func = self.best_agree_func
             return curr_best_k
 
         # Recursive call w/ new candidates.
@@ -627,10 +633,10 @@ class BBNRHarness(KNNHarness):
                 self.best_theta = theta
                 self.best_agree_func = agree_func
 
-        return curr_best_k
+        return curr_best_k, best_avg_score
 
 
-# test = BBNRHarness('regressor', 'datasets/abalone.data', 'Rings')
-test = BBNRHarness("regressor", "datasets/regression/automobile.data", "symboling")
-# test = BBNRHarness("classifier", "datasets/classification/heart.data", "num")
-print(test.evaluate())
+# test = BBNRHarness("regressor", "datasets/regression/abalone.data", "Rings")
+# test = BBNRHarness("regressor", "datasets/regression/student_portugese.data", "G3")
+# test = BBNRHarness("classifier", "datasets/classification/car.data", "class")
+# print(test.evaluate())

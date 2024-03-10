@@ -566,7 +566,7 @@ class KNNHarness:
         candidate_k: int
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        candidate_k_values = [3]
+        # candidate_k_values = [3]
 
         # For each candidate k value
         for candidate_k in candidate_k_values:
@@ -672,7 +672,7 @@ class KNNHarness:
         )
 
         # TODO: COMMENT FOR ACTUAL EXPERIMENTS
-        new_candidates = [3]
+        # new_candidates = [3]
 
         # If empty list or new_candidates just has curr_best_k end grid search.
         if not new_candidates or new_candidates == [curr_best_k]:
@@ -718,11 +718,14 @@ class KNNHarness:
 
             best_k: int
 
-            # best_k = random.choice(candidate_k_values)
+            import random
+
+            best_k = random.choice(candidate_k_values)
 
             # Get best k by getting predictions for validation from training.
             # TODO: UNCOMMENT FOR EXPERIMENTS AND REMOVE RANDOM.
             best_k = self._get_best_k(dev_data, dev_targets, candidate_k_values)
+
             dev_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
             training_cols: pd.Index
@@ -767,7 +770,7 @@ class KNNHarness:
             traceback.print_exc()
             exit(1)
 
-    def evaluate(self) -> float:
+    def evaluate(self) -> tuple[list[float], float]:
         """Returns MAE or accuracy of kNN on the dataset."""
 
         # Total MAE / accuracy (depending on task).
@@ -809,11 +812,13 @@ class KNNHarness:
         # Calculate the average score.
         total_score = sum(error_estimates) / len(error_estimates)
 
-        return total_score
+        return (error_estimates, total_score)
 
 
 # test = KNNHarness("classifier", "datasets/classification/wine_origin.data", "class")
-# test = KNNHarness('classifier', 'datasets/heart.data', 'num')
+# test = KNNHarness("classifier", "datasets/classification/heart.data", "num")
+# test = KNNHarness("classifier", "datasets/classification/car.data", "class")
 # print(test.evaluate())
-# test = KNNHarness("regressor", "datasets/regression/automobile.data", "symboling")
+# test = KNNHarness("regressor", "datasets/regression/student_portugese.data", "G3")
+# test = KNNHarness("classifier", "datasets/classification/zoo.data", "type")
 # print(test.evaluate())
