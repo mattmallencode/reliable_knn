@@ -22,6 +22,7 @@ class RENNHarness(KNNHarness):
         Keyword arguments:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
+        noise_level -- fraction of examples in training / val to make noisy.
         test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
         """

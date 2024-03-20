@@ -23,7 +23,7 @@ class KNNHarness:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
-        noise_level -- percentage of examples in training / val to make noisy.
+        noise_level -- fraction of examples in training / val to make noisy.
         missing_values -- strings denoting missing values in the dataset.
         """
 
@@ -811,10 +811,10 @@ class KNNHarness:
     def _introduce_artificial_noise(
         self, dataset_targets: pd.Series, noise_level: float
     ) -> pd.Series:
-        """Makes {noise_level}% of dataset_targets noisy
+        """Makes len(dataset_targets) * noise_level examples noisy
 
         dataset_targets -- target values of the training / dev set.
-        noise_level -- percentage of dataset_targets to make noisy.
+        noise_level -- fraction of dataset_targets to make noisy.
         """
 
         # Select examples to make label-noisy.

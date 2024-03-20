@@ -23,7 +23,7 @@ class BBNRHarness(KNNHarness):
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
-        noise_level -- the percentage of the dataset to inject noise into.
+        noise_level -- fraction of examples in training / val to make noisy.
         missing_values -- strings denoting missing values in the dataset.
         theta -- the tolerated difference for regression, multiplier if SD.
         agree_func -- how theta is calc'd, 'given' means theta is used as is.

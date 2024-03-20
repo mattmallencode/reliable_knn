@@ -19,9 +19,9 @@ class NoiseComplaintsHarness(KNNHarness):
 
         Keyword arguments:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'
-        target_column_name -- name of the column we are predicting..
         dataset_file_path -- file path to the dataset to run the kNN on.
-        noise_level -- percentage of examples in training / val to make noisy.
+        target_column_name -- name of the column we are predicting.
+        noise_level -- fraction of examples in training / val to make noisy.
         missing_values -- strings denoting missing values in the dataset.
         """
 
