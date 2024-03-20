@@ -36,9 +36,7 @@ class NoiseComplaintsHarness(KNNHarness):
         self._curr_lambda_s: float = 0
         self._curr_lambda_p: float = 0
         self._curr_agree_func: str | None = "sd_neighbors"
-        self._curr_kind_sel: str | None = "mode"
         self._best_agree_func: str | None = self._curr_agree_func
-        self._best_kind_sel: str | None = self._curr_kind_sel
         self._best_theta: float | None = self._curr_theta
         self._best_lambda_s: float | None = self._curr_lambda_s
         self._best_lambda_p: float | None = self._curr_lambda_p
@@ -155,16 +153,6 @@ class NoiseComplaintsHarness(KNNHarness):
     def curr_agree_func(self, agree_func: str | None) -> None:
         """Setter for the curr_agree_func property."""
         self._curr_agree_func = agree_func
-
-    @property
-    def curr_kind_sel(self) -> str | None:
-        """Getter for the curr_kind_sel property."""
-        return self._curr_kind_sel
-
-    @curr_kind_sel.setter
-    def curr_kind_sel(self, curr_kind_sel: str | None) -> None:
-        """Setter for the curr_kind_sel property."""
-        self._curr_kind_sel = curr_kind_sel
 
     @property
     def agree_funcs(self) -> list[str]:
