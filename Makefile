@@ -11,6 +11,7 @@ all: setup replace_file
 setup:
 	$(PYTHON) -m venv $(VENV_DIR)
 	$(VENV_DIR)/bin/pip install -r requirements.txt
+	mkdir results
 
 replace_file:
 	cp $(CUSTOM_FILE) $(PACKAGE_PATH)

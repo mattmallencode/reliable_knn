@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler  # type: ignore
-from harness import KNNHarness
+from src.harness import KNNHarness
 from collections import defaultdict
 from sklearn.model_selection import KFold, StratifiedKFold  # type: ignore
 
@@ -12,8 +12,9 @@ class BBNRHarness(KNNHarness):
         regressor_or_classifier: str,
         dataset_file_path: str,
         target_column_name: str,
+        noise_level: float,
         missing_values: list[str] = ["?"],
-        theta: float = 2,
+        theta: float = 0.1,
         agree_func: str = "sd_neighbors",
     ):
         """Initialises a kNN Harness that applies BBNR to training data.
@@ -22,6 +23,7 @@ class BBNRHarness(KNNHarness):
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
+        noise_level -- fraction of examples in training / val to make noisy.
         missing_values -- strings denoting missing values in the dataset.
         theta -- the tolerated difference for regression, multiplier if SD.
         agree_func -- how theta is calc'd, 'given' means theta is used as is.
@@ -31,66 +33,106 @@ class BBNRHarness(KNNHarness):
             regressor_or_classifier,
             dataset_file_path,
             target_column_name,
+            noise_level,
             missing_values,
         )
 
-        self._theta = theta
-        self._agree_func = agree_func
+        self._theta: float = theta
+        self._agree_func: str = agree_func
         agree_func = "sd_neighbors"
-        theta = 0.5
+        theta = 0.1
         self._curr_theta: float | None = theta
         self._curr_agree_func: str | None = agree_func
         self._best_agree_func: str | None = agree_func
         self._best_theta: float | None = theta
-        self._agree_funcs = ["sd_neighbors", "sd_whole"]
-        self._thetas = [0.5, 1, 1.5, 2, 2.5]
+        self._agree_funcs: list[str] = ["sd_neighbors", "sd_whole"]
+        self._sd_whole: float | None = None
+        self._thetas: list[float] = [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+            1,
+            1.1,
+            1.2,
+            1.3,
+            1.4,
+            1.5,
+            1.6,
+            1.7,
+            1.8,
+            1.9,
+            2,
+            2.1,
+            2.2,
+            2.3,
+            2.4,
+            2.5,
+        ]
 
     @property
     def curr_theta(self) -> float | None:
+        """Getter for the curr_theta property."""
         return self._curr_theta
 
     @curr_theta.setter
     def curr_theta(self, theta: float | None) -> None:
+        """Setter for the curr_theta property."""
         self._curr_theta = theta
 
     @property
     def curr_agree_func(self) -> str | None:
+        """Getter for the curr_agree_func property."""
         return self._curr_agree_func
 
     @curr_agree_func.setter
     def curr_agree_func(self, agree_func: str | None) -> None:
+        """Setter for the curr_agree_func property."""
         self._curr_agree_func = agree_func
 
     @property
     def agree_funcs(self) -> list[str]:
+        """Getter for the agree_funcs property."""
         return self._agree_funcs
 
     @property
     def thetas(self) -> list[float]:
+        """Getter for the thetas property."""
         return self._thetas
 
     @property
     def best_theta(self) -> float | None:
+        """Getter for the best_theta property."""
         return self._best_theta
 
     @best_theta.setter
     def best_theta(self, theta: float | None) -> None:
+        """Setter for the best_theta property."""
         self._best_theta = theta
 
     @property
     def best_agree_func(self) -> str | None:
+        """Getter for the best_agree_func property."""
         return self._best_agree_func
 
     @best_agree_func.setter
     def best_agree_func(self, agree_func: str | None) -> None:
+        """Setter for the best_agree_func property."""
         self._best_agree_func = agree_func
 
     @property
-    def sd_whole(self) -> float:
+    def sd_whole(self) -> float | None:
+        """Getter for the sd_whole property."""
         return self._sd_whole
 
     @sd_whole.setter
     def sd_whole(self, sd_whole: float) -> None:
+        """Setter for the sd_whole property."""
         self._sd_whole = sd_whole
 
     def _preprocess_dataset(
@@ -391,6 +433,8 @@ class BBNRHarness(KNNHarness):
             if self.curr_agree_func == "given":
                 return abs_diff < self.curr_theta
             elif self.curr_agree_func == "sd_whole":
+                if self.sd_whole is None:
+                    self.sd_whole = 1
                 return abs_diff < self.curr_theta * self.sd_whole
             elif self.curr_agree_func == "sd_neighbors":
                 # Calculate the standard deviation of the neighbors.
@@ -566,6 +610,11 @@ class BBNRHarness(KNNHarness):
                 dev_targets.iloc[val_idx].copy(),
             )
 
+            train_targets = self._introduce_artificial_noise(
+                train_targets,
+                self.noise_level,
+            )
+
             train_targets.reset_index(drop=True, inplace=True)
             val_targets.reset_index(drop=True, inplace=True)
 
@@ -633,10 +682,12 @@ class BBNRHarness(KNNHarness):
                 self.best_theta = theta
                 self.best_agree_func = agree_func
 
+        if best_avg_score is None:
+            # If classifier set the init best_avg_score to negative infinity.
+            if self.regressor_or_classifier == "classifier":
+                best_avg_score = float("-inf")
+            # If regressor set the init best_avg_score to positive infinity.
+            else:
+                best_avg_score = float("inf")
+
         return curr_best_k, best_avg_score
-
-
-# test = BBNRHarness("regressor", "datasets/regression/abalone.data", "Rings")
-# test = BBNRHarness("regressor", "datasets/regression/student_portugese.data", "G3")
-# test = BBNRHarness("classifier", "datasets/classification/car.data", "class")
-# print(test.evaluate())

@@ -4,7 +4,7 @@ from imblearn.under_sampling import (  # type: ignore
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler  # type: ignore
-from harness import KNNHarness
+from src.harness import KNNHarness
 from sklearn.model_selection import KFold, StratifiedKFold  # type: ignore
 
 
@@ -14,6 +14,7 @@ class RENNHarness(KNNHarness):
         regressor_or_classifier: str,
         dataset_file_path: str,
         target_column_name: str,
+        noise_level: float,
         missing_values: list[str] = ["?"],
     ):
         """Initialises a kNN Harness that applies RENN to training data.
@@ -21,6 +22,7 @@ class RENNHarness(KNNHarness):
         Keyword arguments:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
+        noise_level -- fraction of examples in training / val to make noisy.
         test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
         """
@@ -29,6 +31,7 @@ class RENNHarness(KNNHarness):
             regressor_or_classifier,
             dataset_file_path,
             target_column_name,
+            noise_level,
             missing_values,
         )
         self._curr_theta: float | None = 0.5
@@ -37,68 +40,109 @@ class RENNHarness(KNNHarness):
         self._best_agree_func: str | None = self._curr_agree_func
         self._best_kind_sel: str | None = self._curr_kind_sel
         self._best_theta: float | None = self._curr_theta
-        self._agree_funcs = ["sd_neighbors", "sd_whole"]
-        self._thetas = [0.5, 1, 1.5, 2, 2.5]
-        self._kind_sels = ["mode", "all"]
+        self._agree_funcs: list[str] = ["sd_neighbors", "sd_whole"]
+        self._thetas: list[float] = [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+            1,
+            1.1,
+            1.2,
+            1.3,
+            1.4,
+            1.5,
+            1.6,
+            1.7,
+            1.8,
+            1.9,
+            2,
+            2.1,
+            2.2,
+            2.3,
+            2.4,
+            2.5,
+        ]
+        self._kind_sels: list[str] = ["mode", "all"]
 
     @property
     def curr_theta(self) -> float | None:
+        """Getter for the curr_theta property."""
         return self._curr_theta
 
     @curr_theta.setter
     def curr_theta(self, theta: float | None) -> None:
+        """Setter for the curr_theta property."""
         self._curr_theta = theta
 
     @property
     def curr_agree_func(self) -> str | None:
+        """Getter for the curr_agree_func property."""
         return self._curr_agree_func
 
     @curr_agree_func.setter
     def curr_agree_func(self, agree_func: str | None) -> None:
+        """Setter for the curr_agree_func property."""
         self._curr_agree_func = agree_func
 
     @property
     def curr_kind_sel(self) -> str | None:
+        """Getter for the curr_kind_sel property."""
         return self._curr_kind_sel
 
     @curr_kind_sel.setter
     def curr_kind_sel(self, curr_kind_sel: str | None) -> None:
+        """Setter for the curr_kind_sel property."""
         self._curr_kind_sel = curr_kind_sel
 
     @property
     def agree_funcs(self) -> list[str]:
+        """Getter for the agree_funcs property."""
         return self._agree_funcs
 
     @property
     def thetas(self) -> list[float]:
+        """Getter for the thetas property."""
         return self._thetas
 
     @property
     def best_theta(self) -> float | None:
+        """Getter for the best_theta property."""
         return self._best_theta
 
     @best_theta.setter
     def best_theta(self, theta: float | None) -> None:
+        """Setter for the best_theta property."""
         self._best_theta = theta
 
     @property
     def best_agree_func(self) -> str | None:
+        """Getter for the best_agree_func property."""
         return self._best_agree_func
 
     @best_agree_func.setter
     def best_agree_func(self, agree_func: str | None) -> None:
+        """Setter for the best_agree_func property."""
         self._best_agree_func = agree_func
 
     @property
     def best_kind_sel(self) -> str | None:
+        """Getter for the best_kind_sel property."""
         return self._best_kind_sel
 
     @best_kind_sel.setter
     def best_kind_sel(self, kind_sel: str | None) -> None:
+        """Setter for the best_kind_sel property."""
         self._best_kind_sel = kind_sel
 
     @property
     def kind_sels(self) -> list[str]:
+        """Getter for the kind_sels property."""
         return self._kind_sels
 
     def _preprocess_dataset(
@@ -153,8 +197,8 @@ class RENNHarness(KNNHarness):
                 dataset_np, training_targets_np = renn.fit_resample(
                     dataset_np, training_targets_np
                 )
-            except Exception as e:
-                print(e)
+            except Exception:
+                pass
 
         return (dataset_np, training_targets_np, training_cols, scaler)
 
@@ -340,6 +384,11 @@ class RENNHarness(KNNHarness):
             train_targets.reset_index(drop=True, inplace=True)
             val_targets.reset_index(drop=True, inplace=True)
 
+            train_targets = self._introduce_artificial_noise(
+                train_targets,
+                self.noise_level,
+            )
+
             train_data_scaled: np.ndarray
             val_data_scaled: np.ndarray
             training_cols: pd.Index
@@ -390,6 +439,14 @@ class RENNHarness(KNNHarness):
         # Get the avg_score by dividing by the number of folds.
         avg_score: float = total_score / n_splits
 
+        if best_avg_score is None:
+            # If classifier set the init best_avg_score to negative infinity.
+            if self.regressor_or_classifier == "classifier":
+                best_avg_score = float("-inf")
+            # If regressor set the init best_avg_score to positive infinity.
+            else:
+                best_avg_score = float("inf")
+
         # If better than best, update best_score and best_k.
         if self.regressor_or_classifier == "classifier":
             # If classification avg_score is better if higher.
@@ -416,8 +473,8 @@ class RENNHarness(KNNHarness):
 # test = RENNHarness("regressor", "datasets/regression/student_math.data", "G3")
 # print(test.evaluate())
 # print("STUDENT PORTUGESE:")
-# test = RENNHarness("regressor", "datasets/regression/student_portugese.data", "G3")
+# test = RENNHarness("regressor", "datasets/regression/student_portugese.data", "G3", 0.2)
 # print(test.evaluate())
 # print("ABALONE:")
-# test = RENNHarness("regressor", "datasets/regression/abalone.data", "Rings")
+# test = RENNHarness("regressor", "datasets/regression/automobile.data", "symboling", 0.2)
 # print(test.evaluate())
