@@ -14,6 +14,7 @@ class KNNHarness:
         regressor_or_classifier: str,
         dataset_file_path: str,
         target_column_name: str,
+        noise_level: float,
         missing_values: list[str] = ["?"],
     ):
         """Initialises a kNN Harness.
@@ -22,11 +23,9 @@ class KNNHarness:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
         dataset_file_path -- file path to the dataset to run the kNN on.
         target_column_name -- name of the column we are predicting.
+        noise_level -- percentage of examples in training / val to make noisy.
         missing_values -- strings denoting missing values in the dataset.
         """
-
-        # Set random seed to make the outcomes of experiments deterministic.
-        np.random.seed(42)
 
         # Raise Exception if user passed invalid regressor_or_classifier val.
         if regressor_or_classifier.lower() not in ["classifier", "regressor"]:
@@ -39,6 +38,7 @@ class KNNHarness:
         self._dataset_file_path: str = dataset_file_path
         self._target_column_name: str = target_column_name
         self._missing_values: list[str] = missing_values
+        self._noise_level: float = noise_level
         # The curr step size used for the grid search of k (calculated later).
         self._step_size_k: int = 10
         # The current (not best) value for k (important for editing algos).
@@ -85,6 +85,18 @@ class KNNHarness:
         """Setter for the step_size_k property."""
 
         self._step_size_k = step
+
+    @property
+    def noise_level(self) -> float:
+        """Getter for the noise_level property."""
+
+        return self._noise_level
+
+    @noise_level.setter
+    def noise_level(self, noise: float) -> None:
+        """Setter for the noise_level property."""
+
+        self._noise_level = noise
 
     @property
     def curr_k(self) -> int:
@@ -146,6 +158,8 @@ class KNNHarness:
             self.dataset_targets = pd.Series(
                 label_encoder.transform(self.dataset_targets)
             )
+        else:
+            self.dataset_targets = self.dataset_targets.astype(float)
 
     def _get_initial_candidate_k_values(self, num_examples: int) -> list[int]:
         """Returns init list of 5 k candidates for KNN based on num_examples.
@@ -364,17 +378,24 @@ class KNNHarness:
         # Find the mode of the target values.
         values, counts = np.unique(target_column[indices], return_counts=True)
 
-        # Get indices of examples with the mode class.
-        max_indices: np.ndarray = np.argwhere(counts == np.amax(counts)).flatten()
+        most_frequent: float
 
-        # Pick one at random (handles cases where there's a tie).
-        random_index = np.random.choice(max_indices)
+        # Applied this check since sometimes editing algos can be overzealous.
+        if counts.size == 0:
+            most_frequent = np.random.choice(self.dataset_targets.unique())
+            return most_frequent
+        else:
+            # Get indices of examples with the mode class.
+            max_indices: np.ndarray = np.argwhere(counts == np.amax(counts)).flatten()
 
-        # Give the final answer of the vote.
-        most_frequent: float = values[random_index]
+            # Pick one at random (handles cases where there's a tie).
+            random_index = np.random.choice(max_indices)
 
-        # Return most common class of corresponding target values.
-        return most_frequent
+            # Give the final answer of the vote.
+            most_frequent = values[random_index]
+
+            # Return most common class of corresponding target values.
+            return most_frequent
 
     def _get_mae_of_knn_regressor(
         self,
@@ -601,6 +622,11 @@ class KNNHarness:
                 train_targets.reset_index(drop=True, inplace=True)
                 val_targets.reset_index(drop=True, inplace=True)
 
+                # Add artificial noise to the training targets.
+                train_targets = self._introduce_artificial_noise(
+                    train_targets, self.noise_level
+                )
+
                 train_data_scaled: np.ndarray
                 val_data_scaled: np.ndarray
                 training_cols: pd.Index
@@ -685,13 +711,18 @@ class KNNHarness:
 
         return curr_best_k
 
-    def _evaluate_fold(self, dev_idx: np.ndarray, test_idx: np.ndarray) -> float:
+    def _evaluate_fold(
+        self, fold_idx: int, dev_idx: np.ndarray, test_idx: np.ndarray
+    ) -> tuple[int, float]:
         """Returns the accuracy / MAE of kNN when evaluated on a given fold.
 
         Keyword arguments:
+        fold_idx -- the index of the fold (needed fir since its multicore).
         dev_idx -- the indices of the dev data i.e. training + validation.
         test_idx -- the indices of the testing data.
         """
+
+        np.random.seed(42)
 
         try:
             dev_data: pd.DataFrame
@@ -718,13 +749,14 @@ class KNNHarness:
 
             best_k: int
 
-            import random
-
-            best_k = random.choice(candidate_k_values)
-
             # Get best k by getting predictions for validation from training.
             # TODO: UNCOMMENT FOR EXPERIMENTS AND REMOVE RANDOM.
             best_k = self._get_best_k(dev_data, dev_targets, candidate_k_values)
+
+            # Add artificial noise to development targets.
+            dev_targets = self._introduce_artificial_noise(
+                dev_targets, self.noise_level
+            )
 
             dev_data_scaled: np.ndarray
             testing_data_scaled: np.ndarray
@@ -749,26 +781,66 @@ class KNNHarness:
             # Get MAE/accuracy of test data when neighbors are gotten from dev.
 
             if self.regressor_or_classifier == "regressor":
-                return self._get_mae_of_knn_regressor(
-                    best_k,
-                    dev_data_scaled,
-                    testing_data_scaled,
-                    dev_targets_np,
-                    test_targets,
+                return (
+                    fold_idx,
+                    self._get_mae_of_knn_regressor(
+                        best_k,
+                        dev_data_scaled,
+                        testing_data_scaled,
+                        dev_targets_np,
+                        test_targets,
+                    ),
                 )
 
             else:
-                return self._get_accuracy_of_knn_classifier(
-                    best_k,
-                    dev_data_scaled,
-                    testing_data_scaled,
-                    dev_targets_np,
-                    test_targets,
+                return (
+                    fold_idx,
+                    self._get_accuracy_of_knn_classifier(
+                        best_k,
+                        dev_data_scaled,
+                        testing_data_scaled,
+                        dev_targets_np,
+                        test_targets,
+                    ),
                 )
         except Exception as e:
             print(e)
             traceback.print_exc()
             exit(1)
+
+    def _introduce_artificial_noise(
+        self, dataset_targets: pd.Series, noise_level: float
+    ) -> pd.Series:
+        """Makes {noise_level}% of dataset_targets noisy
+
+        dataset_targets -- target values of the training / dev set.
+        noise_level -- percentage of dataset_targets to make noisy.
+        """
+
+        # Select examples to make label-noisy.
+        dataset_size = len(dataset_targets)
+        num_samples_to_noise = int(dataset_size * noise_level)
+        indices_to_noise = np.random.choice(
+            dataset_size, num_samples_to_noise, replace=False
+        )
+
+        # For classification, select another class at random.
+        if self.regressor_or_classifier == "classifier":
+            unique_classes = np.unique(dataset_targets)
+            for index in indices_to_noise:
+                current_class = dataset_targets.iloc[index]
+                possible_classes = np.delete(
+                    unique_classes, np.where(unique_classes == current_class)
+                )
+                dataset_targets.iloc[index] = np.random.choice(possible_classes)
+
+        # For regression, apply Gaussian noise.
+        else:
+            std_dev = dataset_targets.std()
+            noise = np.random.normal(0, std_dev, num_samples_to_noise)
+            dataset_targets.iloc[indices_to_noise] += noise
+
+        return dataset_targets
 
     def evaluate(self) -> tuple[list[float], float]:
         """Returns MAE or accuracy of kNN on the dataset."""
@@ -784,24 +856,26 @@ class KNNHarness:
             folds = list(kfold.split(self.dataset))
 
         # List of the error estimates for each fold.
-        error_estimates: list[float] = []
+        error_estimates: list[tuple[int, float]] = []
 
         progress_bar = tqdm.tqdm(total=5)
 
-        def log_error_estimate(x: float) -> None:
-            """Appends x to error_estimates."""
-            error_estimates.append(x)
+        def log_error_estimate(idx_x: tuple[int, float]) -> None:
+            """Appends (idx, x) to error_estimates."""
+            error_estimates.append((idx_x[0], idx_x[1]))
             progress_bar.update()
             return
 
         # Multiprocessing pool for each fold.
         pool = mp.Pool(5)
 
+        fold_idx: int
+
         # Spin up a process for each fold.
-        for fold in folds:
+        for fold_idx, fold in enumerate(folds):
             pool.apply_async(
                 self._evaluate_fold,
-                args=(fold[0], fold[1]),
+                args=(fold_idx, fold[0], fold[1]),
                 callback=log_error_estimate,
             )
 
@@ -809,16 +883,21 @@ class KNNHarness:
         pool.close()
         pool.join()
 
-        # Calculate the average score.
-        total_score = sum(error_estimates) / len(error_estimates)
+        error_estimates.sort(key=lambda x: x[0])
+        error_estimates_sorted: list[float] = [
+            error_estimate[1] for error_estimate in error_estimates
+        ]
 
-        return (error_estimates, total_score)
+        # Calculate the average score.
+        total_score = sum(error_estimates_sorted) / len(error_estimates_sorted)
+
+        return (error_estimates_sorted, total_score)
 
 
 # test = KNNHarness("classifier", "datasets/classification/wine_origin.data", "class")
 # test = KNNHarness("classifier", "datasets/classification/heart.data", "num")
 # test = KNNHarness("classifier", "datasets/classification/car.data", "class")
 # print(test.evaluate())
-# test = KNNHarness("regressor", "datasets/regression/student_portugese.data", "G3")
+# test = KNNHarness("regressor", "datasets/regression/automobile.data", "symboling")
 # test = KNNHarness("classifier", "datasets/classification/zoo.data", "type")
 # print(test.evaluate())
