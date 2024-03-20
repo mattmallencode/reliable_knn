@@ -892,12 +892,3 @@ class KNNHarness:
         total_score = sum(error_estimates_sorted) / len(error_estimates_sorted)
 
         return (error_estimates_sorted, total_score)
-
-
-# test = KNNHarness("classifier", "datasets/classification/wine_origin.data", "class")
-# test = KNNHarness("classifier", "datasets/classification/heart.data", "num")
-# test = KNNHarness("classifier", "datasets/classification/car.data", "class")
-# print(test.evaluate())
-# test = KNNHarness("regressor", "datasets/regression/automobile.data", "symboling")
-# test = KNNHarness("classifier", "datasets/classification/zoo.data", "type")
-# print(test.evaluate())

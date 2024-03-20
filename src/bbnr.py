@@ -691,9 +691,3 @@ class BBNRHarness(KNNHarness):
                 best_avg_score = float("inf")
 
         return curr_best_k, best_avg_score
-
-
-# test = BBNRHarness("regressor", "datasets/regression/abalone.data", "Rings")
-# test = BBNRHarness("regressor", "datasets/regression/student_portugese.data", "G3")
-# test = BBNRHarness("classifier", "datasets/classification/iris.data", "class", 0.5)
-# print(test.evaluate())
