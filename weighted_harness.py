@@ -1,18 +1,18 @@
 import numpy as np
-from harness import KNNHarness
+from src.harness import KNNHarness
+import sys
 
 
 class WeightedKNNHarness(KNNHarness):
-
     def __init__(
-            self,
-            regressor_or_classifier: str,
-            dataset_file_path: str,
-            target_column_name: str,
-            test_size: float = 0.2,
-            missing_values: list[str] = ['?']
+        self,
+        regressor_or_classifier: str,
+        dataset_file_path: str,
+        target_column_name: str,
+        test_size: float = 0.2,
+        missing_values: list[str] = ["?"],
     ):
-        '''Initialises a Weighted kNN Harness.
+        """Initialises a Weighted kNN Harness.
 
         Keyword arguments:
         regressor_or_classifier -- what kNN it runs 'regressor' | 'classifier'.
@@ -20,35 +20,40 @@ class WeightedKNNHarness(KNNHarness):
         target_column_name -- name of the column we are predicting.
         test_size -- what percentage of the dataset to reserve for testing.
         missing_values -- strings denoting missing values in the dataset.
-        '''
+        """
 
         # Call the constructor of the super class.
-        super().__init__(regressor_or_classifier, dataset_file_path,
-                         target_column_name, test_size, missing_values)
+        super().__init__(
+            regressor_or_classifier,
+            dataset_file_path,
+            target_column_name,
+            test_size,
+            missing_values,
+        )
 
-    def knn_classifier(
-            self,
-            example_to_predict: np.ndarray,
-            dataset: np.ndarray,
-            target_column: np.ndarray,
-            k: int = 3
+    def _knn_classifier(
+        self,
+        example_to_predict: np.ndarray,
+        dataset: np.ndarray,
+        target_column: np.ndarray,
+        k: int = 3,
     ) -> str:
-        '''Predicts the class label of an example using weighted kNN.
+        """Predicts the class label of an example using weighted kNN.
 
         Keyword arguments:
         example_to_predict -- the example we are running the classification on.
         dataset -- the dataset to get the nearest neighbors from.
         target_column -- column w/ the class labels of the examples in dataset.
         k -- the number of closest neighbors to use in the mode calculation.
-        '''
+        """
 
         # Compute euclidean distances using vectorized operations.
         distances: np.ndarray = np.sqrt(
-            np.sum((dataset - example_to_predict) ** 2, axis=1))
+            np.sum((dataset - example_to_predict) ** 2, axis=1)
+        )
 
-        # Check for 0 distances & add a small value to avoid division by zero.
-        small_constant: np.number = np.nextafter(np.float32(0), np.float32(1))
-        distances = np.where(distances == 0, small_constant, distances)
+        # Add a small value to avoid division by zero.
+        distances = distances + sys.float_info.epsilon
 
         # Get indices of the k smallest distances.
         indices: np.ndarray = np.argpartition(distances, k)[:k]
@@ -72,29 +77,29 @@ class WeightedKNNHarness(KNNHarness):
 
         return most_frequent
 
-    def knn_regressor(
+    def _knn_regressor(
         self,
         example_to_predict: np.ndarray,
         dataset: np.ndarray,
         target_column: np.ndarray,
-        k: int = 3
+        k: int = 3,
     ) -> float:
-        '''Predicts the target value of an example using weighted kNN.
+        """Predicts the target value of an example using weighted kNN.
 
         Keyword arguments:
         example_to_predict -- the example we are running the regression on.
         dataset -- the dataset to get the nearest neighbors from.
         target_column -- column w/ target values of examples in the dataset.
         k -- the number of closest neighbors to use in weighted mean calc.
-        '''
+        """
 
         # Compute euclidean distances using vectorized operations.
         distances: np.ndarray = np.sqrt(
-            np.sum((dataset - example_to_predict) ** 2, axis=1))
+            np.sum((dataset - example_to_predict) ** 2, axis=1)
+        )
 
-        # Check for 0 distances & add a small value to avoid division by zero.
-        small_constant: np.number = np.nextafter(np.float32(0), np.float32(1))
-        distances = np.where(distances == 0, small_constant, distances)
+        # Add a small value to avoid division by zero.
+        distances = distances + sys.float_info.epsilon
 
         # Get indices of the k smallest distances.
         indices: np.ndarray = np.argpartition(distances, k)[:k]
@@ -103,8 +108,9 @@ class WeightedKNNHarness(KNNHarness):
         weights: np.ndarray = 1.0 / distances[indices]
 
         # Compute the weighted mean of the corresponding target values.
-        weighted_mean: float = np.sum(
-            weights * target_column[indices]) / np.sum(weights)
+        weighted_mean: float = np.sum(weights * target_column[indices]) / np.sum(
+            weights
+        )
 
         return float(weighted_mean)
 
