@@ -278,7 +278,7 @@ class NoiseComplaintsHarness(KNNHarness):
     @property
     def curr_lambda_p(self) -> float:
         """Getter for the curr_lambda_p property."""
-        return self._curr_lambda_s
+        return self._curr_lambda_p
 
     @curr_lambda_p.setter
     def curr_lambda_p(self, lambda_p_value: float) -> None:
@@ -315,7 +315,7 @@ class NoiseComplaintsHarness(KNNHarness):
         distances = distances + sys.float_info.epsilon
         similarities = 1.0 / distances
 
-        similarities = similarities.reshape(1, -1)
+        similarities = similarities.reshape(-1, 1)
 
         # Scale these similarities using the precomputed scaler
         if self.similarity_scaler is not None:
@@ -325,7 +325,7 @@ class NoiseComplaintsHarness(KNNHarness):
 
         if self.reliabilities is not None:
             influence_scores = (self.curr_lambda_s * scaled_similarities) + (
-                (1 - self.curr_lambda_s) * self.reliabilities.flatten()
+                (1 - self.curr_lambda_s) * self.reliabilities
             )
         else:
             raise TypeError("reliabilities ndarray is None!")
@@ -441,9 +441,7 @@ class NoiseComplaintsHarness(KNNHarness):
         self.similarity_scaler = StandardScaler()
         self.reliability_scaler = StandardScaler()
         self.similarity_scaler = self.similarity_scaler.fit(self.similarities)
-        self.reliabilities = self.reliability_scaler.fit_transform(
-            self.reliabilities.reshape(-1, 1)
-        )
+        self.reliabilities = self.reliability_scaler.fit_transform(self.reliabilities)
 
     def _precompute_similarities(self, dataset: np.ndarray):
         """Computes pairwise inverted euclid for all examples in dataset."""
@@ -461,8 +459,11 @@ class NoiseComplaintsHarness(KNNHarness):
         # Invert the distances to compute similarities.
         self.similarities = 1.0 / distances
 
-        # Set the diagonal to the highest similarity.
-        np.fill_diagonal(self.similarities, 1.0)
+        if self.similarities is not None:
+            # Set the diagonal to the highest similarity.
+            np.fill_diagonal(self.similarities, 1.0)
+
+        self.similarities = self.similarities.reshape(-1, 1)
 
     def _precompute_reliabilities(
         self, dataset: np.ndarray, dataset_targets: np.ndarray
@@ -485,6 +486,8 @@ class NoiseComplaintsHarness(KNNHarness):
         for example_index, coverage_set in coverage_dict.items():
             # The reliability of an example is the length of its coverage set
             self.reliabilities[example_index] = len(coverage_set)
+
+        self.reliabilities = self.reliabilities.reshape(-1, 1)
 
     def _predict_on_same_dataset(
         self,
@@ -686,6 +689,12 @@ class NoiseComplaintsHarness(KNNHarness):
             curr_best_k,
             tried_k,
         )
+
+        with open(f"results/{self.dataset_file_path.split('/')[-1]}_lambda", "a") as f:
+            print(
+                f"LAMBDA_S: {self.best_lambda_s}, LAMBDA_P: {self.best_lambda_p}\n",
+                file=f,
+            )
 
         return best_k
 

@@ -23,6 +23,10 @@ def find_optimal_noise_level(
     """
     fold_performances = []
 
+    f = open(f"results/{dataset.split('/')[-1]}_lambda", "w")
+
+    f.close()
+
     # For each possible noise level, spin up a kNN harness.
     for noise_level in noise_levels:
         np.random.seed(42)
@@ -149,4 +153,6 @@ def create_harness(
         return BBNRHarness(regressor_or_classifier, dataset, target, noise_level)
 
 
-run_tests("classifier", "iris", "class")
+# run_tests("classifier", "iris", "class")
+# run_tests("classifier", "wine_origin", "class")
+# run_tests("classifier", "zoo", "type")
