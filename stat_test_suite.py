@@ -2,12 +2,13 @@ from src.harness import KNNHarness
 from src.renn import RENNHarness
 from src.bbnr import BBNRHarness
 from src.noise_complaints import NoiseComplaintsHarness
+from weighted_harness import WeightedKNNHarness
 import pandas as pd
 from scipy.stats import friedmanchisquare, ttest_rel
 import scikit_posthocs as sp
 import numpy as np
 
-harness_types: list[str] = ["KNN", "RENN", "BBNR", "NCkNN"]
+harness_types: list[str] = ["KNN", "WEIGHT", "RENN", "BBNR", "NCkNN"]
 noise_levels: list[int] = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
@@ -136,6 +137,8 @@ def create_harness(
     """
     if harness_type == "KNN":
         return KNNHarness(regressor_or_classifier, dataset, target, noise_level)
+    elif harness_type == "WEIGHT":
+        return WeightedKNNHarness(regressor_or_classifier, dataset, target, noise_level)
     elif harness_type == "RENN":
         return RENNHarness(regressor_or_classifier, dataset, target, noise_level)
     elif harness_type == "NCkNN":
@@ -146,11 +149,4 @@ def create_harness(
         return BBNRHarness(regressor_or_classifier, dataset, target, noise_level)
 
 
-"""
 run_tests("classifier", "iris", "class")
-run_tests("classifier", "wine_origin", "class")
-run_tests("classifier", "zoo", "type")
-run_tests("classifier", "votes", "class")
-run_tests("classifier", "heart", "num")
-run_tests("classifier", "car", "class")
-"""

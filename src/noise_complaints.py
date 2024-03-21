@@ -4,6 +4,7 @@ from sklearn.preprocessing import StandardScaler  # type: ignore
 from src.harness import KNNHarness
 from sklearn.model_selection import KFold, StratifiedKFold  # type: ignore
 from collections import defaultdict
+import sys
 
 
 class NoiseComplaintsHarness(KNNHarness):
@@ -311,9 +312,8 @@ class NoiseComplaintsHarness(KNNHarness):
         )
 
         # Invert the distances to get similarities, avoiding division by zero
-        with np.errstate(divide="ignore", invalid="ignore"):
-            similarities = 1.0 / distances
-            similarities[distances == 0] = 0
+        distances = distances + sys.float_info.epsilon
+        similarities = 1.0 / distances
 
         similarities = similarities.reshape(1, -1)
 
@@ -333,9 +333,11 @@ class NoiseComplaintsHarness(KNNHarness):
         # Get indices of the k highest influence scores (descending order).
         indices = np.argsort(-(influence_scores.flatten()))[:k]
 
+        self.similarities = scaled_similarities
+
         return indices
 
-    def knn_classifier(
+    def _knn_classifier(
         self,
         example_to_predict: np.ndarray,
         dataset: np.ndarray,
@@ -381,7 +383,7 @@ class NoiseComplaintsHarness(KNNHarness):
 
         return most_frequent
 
-    def knn_regressor(
+    def _knn_regressor(
         self,
         example_to_predict: np.ndarray,
         dataset: np.ndarray,
@@ -454,14 +456,10 @@ class NoiseComplaintsHarness(KNNHarness):
 
         # Compute the pairwise Euclidean distances (sqrt of squared diffs).
         distances = np.sqrt(np.maximum(squared_diff, 0))
+        distances = distances + sys.float_info.epsilon
 
         # Invert the distances to compute similarities.
-        # Where distance is 0 (diagonal), we'll temporarily set it to 1.
-        with np.errstate(divide="ignore", invalid="ignore"):
-            self.similarities = 1.0 / distances
-            if self.similarities is None:
-                raise TypeError("self.similarities is None!")
-            self.similarities[distances == 0] = 0
+        self.similarities = 1.0 / distances
 
         # Set the diagonal to the highest similarity.
         np.fill_diagonal(self.similarities, 1.0)
