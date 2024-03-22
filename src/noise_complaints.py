@@ -416,6 +416,14 @@ class NoiseComplaintsHarness(KNNHarness):
             (1 - self.curr_lambda_p) * self.reliabilities[indices]
         )
 
+        # Check if the sum of weights is zero to avoid division by zero.
+
+        sum_weights = np.sum(weights)
+        if sum_weights == 0:
+            # If sum of weights is zero, distribute equal weights among all examples.
+            num_neighbors = len(indices)
+            weights = np.full_like(weights, fill_value=1.0 / num_neighbors)
+
         # Compute the weighted mean of the corresponding target values.
         weighted_mean = np.sum(weights.flatten() * target_column[indices]) / np.sum(
             weights
@@ -462,8 +470,7 @@ class NoiseComplaintsHarness(KNNHarness):
         if self.similarities is not None:
             # Set the diagonal to the highest similarity.
             np.fill_diagonal(self.similarities, 1.0)
-
-        self.similarities = self.similarities.reshape(-1, 1)
+            self.similarities = self.similarities.reshape(-1, 1)
 
     def _precompute_reliabilities(
         self, dataset: np.ndarray, dataset_targets: np.ndarray

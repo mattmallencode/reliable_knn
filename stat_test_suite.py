@@ -153,6 +153,6 @@ def create_harness(
         return BBNRHarness(regressor_or_classifier, dataset, target, noise_level)
 
 
-# run_tests("classifier", "iris", "class")
-# run_tests("classifier", "wine_origin", "class")
-# run_tests("classifier", "zoo", "type")
+run_tests("regressor", "automobile", "symboling")
+run_tests("regressor", "student_math", "G3")
+run_tests("regressor", "student_portugese", "G3")
