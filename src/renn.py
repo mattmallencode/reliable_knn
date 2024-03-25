@@ -41,33 +41,7 @@ class RENNHarness(KNNHarness):
         self._best_kind_sel: str | None = self._curr_kind_sel
         self._best_theta: float | None = self._curr_theta
         self._agree_funcs: list[str] = ["sd_neighbors", "sd_whole"]
-        self._thetas: list[float] = [
-            0.1,
-            0.2,
-            0.3,
-            0.4,
-            0.5,
-            0.6,
-            0.7,
-            0.8,
-            0.9,
-            1,
-            1.1,
-            1.2,
-            1.3,
-            1.4,
-            1.5,
-            1.6,
-            1.7,
-            1.8,
-            1.9,
-            2,
-            2.1,
-            2.2,
-            2.3,
-            2.4,
-            2.5,
-        ]
+        self._thetas: list[float] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         self._kind_sels: list[str] = ["mode", "all"]
 
     @property
