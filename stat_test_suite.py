@@ -4,7 +4,7 @@ from src.bbnr import BBNRHarness
 from src.noise_complaints import NoiseComplaintsHarness
 from weighted_harness import WeightedKNNHarness
 import pandas as pd
-from scipy.stats import friedmanchisquare, ttest_rel
+from scipy.stats import ttest_rel, friedmanchisquare
 import scikit_posthocs as sp
 import numpy as np
 
@@ -153,6 +153,18 @@ def create_harness(
         return BBNRHarness(regressor_or_classifier, dataset, target, noise_level)
 
 
+run_tests("classifier", "zoo", "type")
+run_tests("classifier", "iris", "class")
+run_tests("classifier", "wine_origin", "class")
+run_tests("classifier", "heart", "num")
+run_tests("classifier", "votes", "class")
+run_tests("classifier", "car", "class")
+
+"""
+run_tests("regressor", "abalone", "Rings")
 run_tests("regressor", "automobile", "symboling")
+run_tests("regressor", "red_wine_quality", "quality")
 run_tests("regressor", "student_math", "G3")
 run_tests("regressor", "student_portugese", "G3")
+run_tests("regressor", "white_wine_quality", "quality")
+"""

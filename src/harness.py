@@ -477,76 +477,58 @@ class KNNHarness:
         self, candidate_k_values: list[int], curr_best_k: int, tried_k: set[int]
     ) -> list[int]:
         """
-        Returns new list of candidate k_values by expanding grid search space.
+        Dynamically expands the search space for k values in k-NN, considering the current best k and avoiding retreading.
 
         Keyword arguments:
-        candidate_k_values -- the initial search space for best k.
+        candidate_k_values -- the initial list of candidate k values.
         curr_best_k -- the current best value for k found.
-        tried_k -- the k values we have tried so far.
+        tried_k -- the set of k values that have been tried so far.
         """
 
-        # The list of new candidates.
-        new_candidates: list[int] = []
+        # If curr_best_k is not in the list of candidates being considered, return an empty list.
+        if not candidate_k_values or curr_best_k not in candidate_k_values:
+            return []
 
-        step: int
+        new_candidates = []
 
-        # If this isn't an edge of a list of candidates.
+        # Determine the direction of search based on the position of curr_best_k.
         if (
-            curr_best_k != candidate_k_values[0]
-            and curr_best_k != candidate_k_values[-1]
-        ):
-            # Reduce step size by 75%.
-            step = int(self.step_size_k * 0.25)
+            curr_best_k == candidate_k_values[0]
+        ):  # If curr_best_k is at the lower edge, search rightwards.
+            direction = "right"
+        elif (
+            curr_best_k == candidate_k_values[-1]
+        ):  # If curr_best_k is at the upper edge, search leftwards.
+            direction = "left"
+        else:  # If curr_best_k is not at the edges, search both directions.
+            direction = "both"
 
-            # If we've gone too small, make the step size 2.
-            if step <= 1:
-                step = 2
+        # Dynamically adjust step size.
+        self.step_size_k = max(
+            int(self.step_size_k * 0.25), 2
+        )  # Ensure the step size doesn't go below 2.
 
-            self.step_size_k = step
+        if direction in ["right", "both"]:
+            # Generate candidates to the right of curr_best_k.
+            right_candidates = [
+                curr_best_k + i * self.step_size_k for i in range(1, 11)
+            ]
+            right_candidates = [
+                k for k in right_candidates if k % 2 != 0 and k not in tried_k and k > 0
+            ]
+            if right_candidates:
+                new_candidates.append(np.random.choice(right_candidates))
 
-            # Take two steps back and two steps forward.
-            new_candidates = [curr_best_k + i * step for i in range(-2, 3)]
+        if direction in ["left", "both"]:
+            # Generate candidates to the left of curr_best_k.
+            left_candidates = [curr_best_k - i * self.step_size_k for i in range(1, 11)]
+            left_candidates = [
+                k for k in left_candidates if k % 2 != 0 and k not in tried_k and k > 0
+            ]
+            if left_candidates:
+                new_candidates.append(np.random.choice(left_candidates))
 
-        # If this is an edge case i.e. start of prev list or end of prev list.
-        else:
-            # Get the step size from the class.
-            step = self.step_size_k
-
-            # If we are at the left edge, should be a negative step.
-            if curr_best_k == candidate_k_values[0]:
-                step *= -1
-
-            # Expand search space according to step.
-            curr_new_candidate: int = curr_best_k + step
-
-            # While we haven't exausted positive values and > 4 new k's.
-            while curr_new_candidate > 0 and len(new_candidates) < 4:
-                # Add the new candidate.
-                new_candidates.append(curr_new_candidate)
-
-                # Expand search space according to step.
-                curr_new_candidate += step
-
-            # Add the curr_best_k back to the list of candidates.
-            new_candidates.append(curr_best_k)
-
-        # Only take odd k's.
-        new_candidates = list(set([k - 1 if k % 2 == 0 else k for k in new_candidates]))
-
-        # Only take positive ks that we haven't tried before (or == curr_best).
-        new_candidates = sorted(
-            list(
-                set(
-                    [
-                        k
-                        for k in new_candidates
-                        if k == curr_best_k or k not in tried_k and k > 0
-                    ]
-                )
-            )
-        )
-
-        return new_candidates
+        return sorted(set(new_candidates))
 
     def _get_best_k(
         self,
