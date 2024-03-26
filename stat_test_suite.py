@@ -153,18 +153,18 @@ def create_harness(
         return BBNRHarness(regressor_or_classifier, dataset, target, noise_level)
 
 
+"""
 run_tests("classifier", "zoo", "type")
 run_tests("classifier", "iris", "class")
 run_tests("classifier", "wine_origin", "class")
 run_tests("classifier", "heart", "num")
 run_tests("classifier", "votes", "class")
 run_tests("classifier", "car", "class")
+"""
 
-"""
-run_tests("regressor", "abalone", "Rings")
-run_tests("regressor", "automobile", "symboling")
-run_tests("regressor", "red_wine_quality", "quality")
+# run_tests("regressor", "automobile", "symboling")
+run_tests("regressor", "auto_mpg", "mpg")
+run_tests("regressor", "liver_disorders", "drinks")
 run_tests("regressor", "student_math", "G3")
+run_tests("regressor", "real_estate_valuation", "price_of_unit_area")
 run_tests("regressor", "student_portugese", "G3")
-run_tests("regressor", "white_wine_quality", "quality")
-"""
